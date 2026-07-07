@@ -83,6 +83,9 @@ pip install -r requirements.txt
    ```bash
    bash scripts/create_db.sh
    ```
+   
+   > [!NOTE]
+   > Creating a new Cloud SQL instance can take **5 to 10 minutes** to provision on Google Cloud. You can start this script first and let it run in the background while you review the workshop architecture and code. Subsequent runs of this script will be instant as it skips creation if the instance already exists.
 2. (Optional) If you want to connect to the database locally for manual queries, download and start the Cloud SQL Auth Proxy:
    ```bash
    # Download the proxy
