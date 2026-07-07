@@ -44,7 +44,7 @@ def main():
     agent_id = "warehouse-manager"
 
     print(f"Initializing Gemini Client for Vertex AI (Project: {project}, Location: global)...")
-    client = genai.Client(vertexai=True, project=project, location="global", http_options={"timeout": 600000})
+    client = genai.Client(vertexai=True, project=project, location="global", http_options={"timeout": 1200000})
 
     # 1. Clean up existing agent if it exists
     print(f"Attempting to delete any existing agent '{agent_id}' to start fresh...")
@@ -84,7 +84,7 @@ def main():
                     "url": mcp_url
                 }
             ],
-            timeout=600
+            timeout=1200
         )
         print(f"Agent creation operation started: {operation.name}")
         operation_name = operation.name
