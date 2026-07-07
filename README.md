@@ -240,10 +240,17 @@ python3 scripts/interact_agent.py
 
 ## 5. Verify the Workshop Scenarios
 
-Run the automated verification script to run the five warehouse scenarios sequentially:
+Run the automated verification script to execute the five warehouse scenarios sequentially.
+
+To run verification in **Local Emulation** mode (Option A):
 ```bash
 export MCP_SERVER_URL="YOUR_CLOUD_RUN_SSE_URL"
 python3 scripts/verify_workshop.py
+```
+
+To run verification using the **Cloud-Managed Agent** (Option B):
+```bash
+python3 scripts/verify_workshop.py --remote
 ```
 
 ### What is Executed:
