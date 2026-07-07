@@ -1,0 +1,233 @@
+import os
+import sys
+import json
+import time
+import argparse
+import asyncio
+from google import genai
+import google.genai.types as genai_types
+from mcp import ClientSession
+from mcp.client.sse import sse_client
+
+def print_banner(text):
+    print("\n" + "=" * 60)
+    print(f" {text.upper()}")
+    print("=" * 60)
+
+async def run_local_verification(project, mcp_url):
+    print(f"Initializing Gemini Client (Project: {project}, Location: global)...")
+    client = genai.Client(vertexai=True, project=project, location="global")
+
+    print(f"Connecting to MCP SSE server at {mcp_url}...")
+    async with sse_client(url=mcp_url) as (read_stream, write_stream):
+        async with ClientSession(read_stream, write_stream) as session:
+            await session.initialize()
+            
+            # Fetch tools and map
+            tools_result = await session.list_tools()
+            func_declarations = []
+            for tool in tools_result.tools:
+                fd = genai_types.FunctionDeclaration(
+                    name=tool.name,
+                    description=tool.description,
+                    parameters=tool.inputSchema
+                )
+                func_declarations.append(fd)
+
+            gemini_tools = [genai_types.Tool(function_declarations=func_declarations)]
+            system_instruction = (
+                "You are a warehouse management assistant. Your task is to help the user manage inventory "
+                "and orders in the warehouse. Use the tools provided by the warehouse-db MCP server to query stock, "
+                "update stock, and create orders. Always summarize your action results clearly for the user."
+            )
+
+            history = []
+
+            # Converse helper for local agent
+            async def converse_local(prompt):
+                print(f"\nUser: {prompt}")
+                history.append(
+                    genai_types.Content(
+                        role="user",
+                        parts=[genai_types.Part.from_text(text=prompt)]
+                    )
+                )
+
+                step_num = 1
+                while True:
+                    response = client.models.generate_content(
+                        model="gemini-3.5-flash",
+                        contents=history,
+                        config=genai_types.GenerateContentConfig(
+                            tools=gemini_tools,
+                            system_instruction=system_instruction
+                        )
+                    )
+
+                    # Observability thought dump
+                    if response.candidates[0].content:
+                        # Log thought/output
+                        pass
+
+                    if response.text:
+                        print(f"Agent: {response.text}")
+                        history.append(response.candidates[0].content)
+                        break
+
+                    if response.function_calls:
+                        history.append(response.candidates[0].content)
+                        response_parts = []
+                        for call in response.function_calls:
+                            print(f"\n[Step {step_num}] Model requested tool call: '{call.name}'")
+                            print(f"  Arguments: {json.dumps(dict(call.args))}")
+                            
+                            # Invoke tool
+                            mcp_result = await session.call_tool(call.name, arguments=dict(call.args))
+                            content_texts = [item.text for item in mcp_result.content if hasattr(item, "text")]
+                            result_text = "\n".join(content_texts)
+                            print(f"  MCP Result <- Tool: {call.name}")
+                            print(f"  Result: {result_text}")
+                            
+                            response_parts.append(
+                                genai_types.Part.from_function_response(
+                                    name=call.name,
+                                    response={"result": result_text}
+                                )
+                            )
+                        history.append(
+                            genai_types.Content(
+                                role="user",
+                                parts=response_parts
+                            )
+                        )
+                        step_num += 1
+                    else:
+                        break
+
+            # Action 1: List inventory
+            print_banner("1. Listing Initial Inventory")
+            await converse_local("List all items in the warehouse inventory.")
+
+            # Action 2: Check current stock of Antigravity Boots (ID 3)
+            print_banner("2. Querying Stock of Product ID 3")
+            await converse_local("Check the current stock level of Antigravity Boots (Product ID 3).")
+
+            # Action 3: Try to place an order that exceeds stock
+            print_banner("3. Attempting Invalid Order (Excessive Stock)")
+            await converse_local("Place an order for 1000 Antigravity Boots for customer 'Verification Test'.")
+
+            # Action 4: Place a valid order
+            print_banner("4. Placing Valid Order (5 Units)")
+            await converse_local("Place an order for 5 Antigravity Boots for customer 'Verification Test'.")
+
+            # Action 5: Verify stock has decreased
+            print_banner("5. Verifying Stock Decreased")
+            await converse_local("Check the stock level of Antigravity Boots again to make sure it went down.")
+
+            print_banner("Verification flow completed successfully!")
+
+def run_remote_verification(project, agent_id):
+    print(f"Initializing Gemini Client for Remote Agent (Project: {project}, Location: global)...")
+    client = genai.Client(vertexai=True, project=project, location="global")
+
+    # Create a new environment/session
+    env_id = f"verification-env-{int(time.time())}"
+    print(f"Session environment initialized: {env_id}")
+
+    # Helper function to send interaction
+    def converse(prompt):
+        print(f"\nUser: {prompt}")
+        interaction = client.interactions.create(
+            agent=agent_id,
+            environment=env_id,
+            input=prompt,
+            background=True
+        )
+        # Poll for completion
+        while True:
+            interaction = client.interactions.get(id=interaction.id)
+            if interaction.status in ["SUCCEEDED", "FAILED", "CANCELLED"]:
+                break
+            time.sleep(2)
+        print(f"Agent: {interaction.output_text.strip() if interaction.output_text else ''}")
+        print(f"[Interaction ID: {interaction.id}]")
+        return interaction.id
+
+    # Action 1: List inventory
+    print_banner("1. Listing Initial Inventory")
+    converse("List all items in the warehouse inventory.")
+
+    # Action 2: Check current stock of Antigravity Boots (ID 3)
+    print_banner("2. Querying Stock of Product ID 3")
+    converse("Check the current stock level of Antigravity Boots (Product ID 3).")
+
+    # Action 3: Try to place an order that exceeds stock
+    print_banner("3. Attempting Invalid Order (Excessive Stock)")
+    converse("Place an order for 1000 Antigravity Boots for customer 'Verification Test'.")
+
+    # Action 4: Place a valid order
+    print_banner("4. Placing Valid Order (5 Units)")
+    last_interaction_id = converse("Place an order for 5 Antigravity Boots for customer 'Verification Test'.")
+
+    # Action 5: Verify stock has decreased
+    print_banner("5. Verifying Stock Decreased")
+    converse("Check the stock level of Antigravity Boots again to make sure it went down.")
+
+    # Action 6: Observability - Fetch trace of last interaction
+    print_banner("6. Retrieving Step Trace (Observability)")
+    print(f"Fetching trace for interaction: {last_interaction_id}...")
+    try:
+        interaction = client.interactions.get(id=last_interaction_id)
+        steps = getattr(interaction, "steps", []) or []
+        for i, step in enumerate(steps):
+            step_type = getattr(step, "type", "unknown")
+            print(f"\n[Step {i+1}] Type: {step_type}")
+            
+            if step_type == "thought":
+                for part in getattr(step, "content", []):
+                    if hasattr(part, "text") and part.text:
+                        print(f"  Thought: {part.text.strip()}")
+                        
+            elif step_type == "mcp_server_tool_call":
+                tool_name = getattr(step, "name", "unknown")
+                server_name = getattr(step, "server_name", "unknown")
+                args = getattr(step, "arguments", {})
+                print(f"  MCP Call -> Server: {server_name}, Tool: {tool_name}")
+                print(f"  Arguments: {json.dumps(args)}")
+                
+            elif step_type == "mcp_server_tool_result":
+                tool_name = getattr(step, "name", "unknown")
+                result = getattr(step, "result", "")
+                print(f"  MCP Result <- Tool: {tool_name}")
+                print(f"  Result: {result}")
+                
+            elif step_type == "model_output":
+                for part in getattr(step, "content", []):
+                    if hasattr(part, "text") and part.text:
+                        print(f"  Response: {part.text.strip()}")
+    except Exception as e:
+        print(f"Failed to fetch interaction trace: {e}")
+
+    print_banner("Verification flow completed successfully!")
+
+def main():
+    project = os.environ.get("GOOGLE_CLOUD_PROJECT")
+    if not project:
+        print("Error: GOOGLE_CLOUD_PROJECT environment variable is not set.")
+        sys.exit(1)
+
+    mcp_url = os.environ.get("MCP_SERVER_URL", "https://warehouse-mcp-server-r2vgs5vdkq-uc.a.run.app/sse")
+    agent_id = "warehouse-manager"
+
+    parser = argparse.ArgumentParser(description="Verify the GEAP Warehouse Management Agent.")
+    parser.add_argument("--remote", action="store_true", help="Run verification using the remote cloud managed agent.")
+    args = parser.parse_args()
+
+    if args.remote:
+        run_remote_verification(project, agent_id)
+    else:
+        print("Running in LOCAL agent emulation mode...")
+        asyncio.run(run_local_verification(project, mcp_url))
+
+if __name__ == "__main__":
+    main()

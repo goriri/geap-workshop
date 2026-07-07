@@ -1,0 +1,7 @@
+venv/
+__pycache__/
+*.pyc
+cloud-sql-proxy
+.env
+.idea/
+.vscode/
