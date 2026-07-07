@@ -17,7 +17,7 @@ graph TD
 
 ## Prerequisites
 
-Ensure you have the Google Cloud CLI (`gcloud`) installed and authenticated:
+If you are running this workshop locally, ensure you have the Google Cloud CLI (`gcloud`) installed and authenticated:
 ```bash
 gcloud auth login
 gcloud auth application-default login
@@ -28,6 +28,9 @@ Set the project you will use for this workshop:
 export GOOGLE_CLOUD_PROJECT="YOUR_PROJECT_ID"
 gcloud config set project $GOOGLE_CLOUD_PROJECT
 ```
+
+> [!TIP]
+> **Cloud Shell Users**: If you are using **Google Cloud Shell**, you can skip running `gcloud auth login` or `gcloud auth application-default login` as you are already authenticated. You can also skip setting the project if Cloud Shell is already configured to your target project (verify by running `gcloud config get project`).
 
 ---
 
