@@ -79,22 +79,49 @@ pip install -r requirements.txt
 
 ## 2. Step 1: Create Cloud SQL DB & Seed Data
 
-1. Run the database creation script. This script will provision a new Cloud SQL PostgreSQL instance named `warehouse-db`, create a database named `warehouse`, create tables, and seed the initial inventory data:
+1. Run the database creation script:
    ```bash
    bash scripts/create_db.sh
    ```
    
    > [!NOTE]
-   > Creating a new Cloud SQL instance can take **5 to 10 minutes** to provision on Google Cloud. You can start this script first and let it run in the background while you review the workshop architecture and code. Subsequent runs of this script will be instant as it skips creation if the instance already exists.
-2. (Optional) If you want to connect to the database locally for manual queries, download and start the Cloud SQL Auth Proxy:
-   ```bash
-   # Download the proxy
-   curl -o cloud-sql-proxy https://storage.googleapis.com/cloud-sql-connectors/v2.11.0/linux/amd64/cloud-sql-proxy
-   chmod +x cloud-sql-proxy
-   
-   # Start the proxy in the background
-   ./cloud-sql-proxy $GOOGLE_CLOUD_PROJECT:us-central1:warehouse-db --port 5433 &
-   ```
+   > Creating a new Cloud SQL instance can take **5 to 10 minutes** to provision on Google Cloud. Subsequent runs of this script will be instant as it skips creation if the instance already exists.
+
+### What is Executed:
+* **Instance Creation:** Provisions a Cloud SQL PostgreSQL v15 database instance named `warehouse-db` in region `us-central1` utilizing the lightweight `db-f1-micro` tier.
+* **Database Setup:** Checks for and creates a PostgreSQL database called `warehouse`.
+* **Table Creation & Seeding:** Triggers `scripts/setup_db.py` to establish connection using the Cloud SQL Python Connector and schema seeding:
+  * Drops any pre-existing tables to ensure a clean state.
+  * Creates an `inventory` table and an `orders` table.
+  * Seeds the inventory with five futuristic warehouse products (e.g., *Quantum Compactor*, *Antigravity Boots*).
+
+### Key Lines in Code:
+* **Cloud SQL Instance Creation (`scripts/create_db.sh`):**
+  ```bash
+  gcloud sql instances create "warehouse-db" \
+      --database-version=POSTGRES_15 \
+      --tier=db-f1-micro \
+      --region="us-central1" \
+      --root-password="super-secret-password" \
+      --quiet
+  ```
+* **Database Seeding and Python Connection (`scripts/setup_db.py`):**
+  ```python
+  from google.cloud.sql.connector import Connector, IPTypes
+  connector = Connector()
+
+  def getconn():
+      return connector.connect(
+          f"{project}:us-central1:warehouse-db",
+          "pg8000",
+          user="postgres",
+          password="super-secret-password",
+          db="warehouse",
+          ip_type=IPTypes.PUBLIC
+      )
+
+  engine = sqlalchemy.create_engine("postgresql+pg8000://", creator=getconn)
+  ```
 
 ---
 
@@ -104,7 +131,7 @@ pip install -r requirements.txt
    ```bash
    bash scripts/deploy_mcp_server.sh
    ```
-   This will output the URL of your deployed service. Save and set this URL in your environment:
+   Save the output `MCP_SERVER_URL` in your terminal:
    ```bash
    export MCP_SERVER_URL="https://warehouse-mcp-server-xxxx-uc.a.run.app/sse"
    ```
@@ -114,64 +141,128 @@ pip install -r requirements.txt
    python3 scripts/register_mcp_server.py
    ```
 
+### What is Executed:
+* **IAM Grants:** Finds your project number and grants the default Compute Engine service account (`{PROJECT_NUMBER}-compute@developer.gserviceaccount.com`) several critical roles (`roles/cloudsql.client`, `roles/storage.objectViewer`, `roles/logging.logWriter`, `roles/artifactregistry.writer`) so Cloud Build can read the sources, compile, and push the Docker container successfully.
+* **Cloud Run Deployment:** Deploys `warehouse-mcp-server` from the local `mcp_server` directory. It configures the Cloud Run instance to mount the Cloud SQL connection (`add-cloudsql-instances`) and sets connection variables (`DB_USER`, `DB_PASS`, `DB_NAME`, `INSTANCE_CONNECTION_NAME`).
+* **Agent Registry Enrollment:** Executes `register_mcp_server.py` to register the MCP tools schema (e.g., `list_inventory`, `create_order`) with the Google Enterprise Agent Registry.
+
+### Key Lines in Code:
+* **IAM Grant Permissions (`scripts/deploy_mcp_server.sh`):**
+  ```bash
+  gcloud projects add-iam-policy-binding "$GOOGLE_CLOUD_PROJECT" \
+      --member="serviceAccount:${SERVICE_ACCOUNT}" \
+      --role="roles/storage.objectViewer" --quiet
+  ```
+* **Cloud Run Server Deployment (`scripts/deploy_mcp_server.sh`):**
+  ```bash
+  gcloud run deploy warehouse-mcp-server \
+      --source mcp_server \
+      --region us-central1 \
+      --add-cloudsql-instances "${GOOGLE_CLOUD_PROJECT}:us-central1:warehouse-db" \
+      --set-env-vars "DB_USER=postgres,DB_PASS=super-secret-password,DB_NAME=warehouse,INSTANCE_CONNECTION_NAME=${GOOGLE_CLOUD_PROJECT}:us-central1:warehouse-db" \
+      --allow-unauthenticated --quiet
+  ```
+
 ---
 
 ## 4. Step 3: Run the Warehouse Agent
 
-Depending on your GCP organization permissions, choose **Option A (Local Emulation - Recommended)** or **Option B (Cloud Managed Agent)**:
+Choose **Option A (Local Emulation - Recommended)** or **Option B (Cloud Managed Agent)** depending on your GCP organizational permissions:
 
 ### Option A: Local Agent Emulation (Works out-of-the-box)
-Certain preview/sandbox projects contain controls that block the remote provisioning of permanent Dialogflow CX agent containers (causing `agents.create` LROs to return `ABORTED`). 
+Certain preview/sandbox projects contain policies that block the remote provisioning of Dialogflow CX agent containers (causing `agents.create` LROs to return `ABORTED`). 
 
-If your project is subject to these restrictions, you can run the **Local Agent Client** which uses the standard Gemini API (`gemini-3.5-flash` in location `global`) with standard tool-use definitions, calling your deployed Cloud Run MCP server directly from your workstation:
+In Local Emulation, you bypass cloud-provisioning completely. The **Local Agent Client** runs the conversational and function-calling loop directly on your workstation using the standard Gemini API (`gemini-3.5-flash`), loading tool specifications directly from your deployed Cloud Run MCP server.
+
 ```bash
 export MCP_SERVER_URL="YOUR_CLOUD_RUN_SSE_URL"
 python3 scripts/local_agent.py
 ```
 
+#### What is Executed:
+* **OAuth / OIDC Authentication:** Checks if the target `MCP_SERVER_URL` points to an authenticated `.run.app` service. If so, it requests a secure Google OIDC ID Token for the Cloud Run audience and attaches it as an `Authorization` header, bypassing corporate *Domain Restricted Sharing* restrictions.
+* **Tool Mapping:** Fetches the database tool schemas from the MCP server and maps them to standard Gemini `FunctionDeclaration` parameters.
+* **Stateful Chat Loop:** Initiates a text loop, passing prompts to Gemini and intercepting requested tool calls, calling the MCP server via SSE, and returning database results back to the model.
+
+#### Key Lines in Code:
+* **OIDC Secure Token Retrieval (`scripts/local_agent.py`):**
+  ```python
+  import google.oauth2.id_token
+  from google.auth.transport.requests import Request
+
+  audience = mcp_url.split("/sse")[0]
+  token = google.oauth2.id_token.fetch_id_token(Request(), audience)
+  headers["Authorization"] = f"Bearer {token}"
+  ```
+* **Mapping MCP Schema to Gemini Function Declarations (`scripts/local_agent.py`):**
+  ```python
+  tools_result = await session.list_tools()
+  for tool in tools_result.tools:
+      fd = genai_types.FunctionDeclaration(
+          name=tool.name,
+          description=tool.description,
+          parameters=tool.inputSchema
+      )
+      func_declarations.append(fd)
+  ```
+
+---
+
 ### Option B: Cloud-Managed Agent
-If your project has full GEAP provisioning enablement:
-1. Register the managed agent in the Agent Registry:
-   ```bash
-   export MCP_SERVER_URL="YOUR_CLOUD_RUN_SSE_URL"
-   python3 scripts/create_agent.py
-   ```
-2. Interact with the registered agent statefully through the Interactions API:
-   ```bash
-   python3 scripts/interact_agent.py
-   ```
+If your project has full GEAP provisioning enablement, you can create a permanent cloud-managed agent.
+
+```bash
+export MCP_SERVER_URL="YOUR_CLOUD_RUN_SSE_URL"
+python3 scripts/create_agent.py
+python3 scripts/interact_agent.py
+```
+
+#### What is Executed:
+* **Agent Provisioning:** Initiates a call to the Vertex AI Agent Engine (`client.agents.create`) using the base agent model (`antigravity-preview-05-2026`). It registers your Cloud Run MCP server URL as a remote toolset.
+* **Operation Polling:** It monitors and polls the long-running operation until the agent container is fully ready.
+
+#### Key Lines in Code:
+* **Configuring Connection Timeouts & Creating Agent (`scripts/create_agent.py`):**
+  ```python
+  # Configure a 20-minute client timeout to allow backend container provisioning
+  client = genai.Client(vertexai=True, project=project, location="global", http_options={"timeout": 1200000})
+
+  operation = client.agents.create(
+      id="warehouse-manager",
+      base_agent="antigravity-preview-05-2026",
+      system_instruction="You are a warehouse management assistant...",
+      tools=[{"type": "mcp_server", "name": "warehouse-db", "url": mcp_url}],
+      timeout=1200 # Overrides default method timeout (20 mins)
+  )
+  ```
 
 ---
 
 ## 5. Verify the Workshop Scenarios
 
 Run the automated verification script to run the five warehouse scenarios sequentially:
-1. **List inventory**: Queries and lists initial warehouse items.
-2. **Query product stock**: Checks inventory details for product ID 3 (Antigravity Boots).
-3. **Invalid order**: Rejects customer order exceeding stock.
-4. **Valid order**: Places a valid customer order, reducing database stock to 0.
-5. **Re-check stock**: Confirms the database inventory was decremented correctly.
-
-To run verification in **Local Emulation** mode:
 ```bash
 export MCP_SERVER_URL="YOUR_CLOUD_RUN_SSE_URL"
 python3 scripts/verify_workshop.py
 ```
 
-To run verification using the **Cloud Managed Agent** (Option B):
-```bash
-python3 scripts/verify_workshop.py --remote
-```
+### What is Executed:
+The script automates five stateful interactions with the agent to verify database transactions and tool calling:
+1. **List inventory**: Invokes `list_inventory` on the database to print initial items.
+2. **Query product stock**: Checks details of Product ID 3 (Antigravity Boots).
+3. **Invalid order (Over-stock)**: Attempts to order 1000 Antigravity Boots. Verification ensures the agent correctly calls `create_order` and rejects it due to insufficient stock.
+4. **Valid order**: Orders 5 Antigravity Boots for customer "Verification Test", which decrements the database inventory level.
+5. **Re-check stock**: Confirms the database inventory level was updated to 0.
 
 ---
 
 ## 6. Step 4: Observability & Agent Management
 
-- **Observability**: When running the Cloud Managed Agent (Option B), call the observability script to retrieve and view the step-by-step reasoning steps and raw database tool logs of the last order transaction:
+* **Observability (Cloud Managed Agent only):** Retrieves the precise reasoning trace and tool execution metadata of the last transaction session:
   ```bash
   python3 scripts/observe_agent.py
   ```
-- **Console Monitoring**: You can also monitor your agent's live health, tool executions, and billing details directly within the Google Cloud Console under the **Gemini Enterprise -> Agent Platform** menu.
+* **Console Monitoring:** Monitor your agent's live health, tool executions, and billing details directly within the Google Cloud Console under the **Gemini Enterprise -> Agent Platform** menu.
 
 ---
 
