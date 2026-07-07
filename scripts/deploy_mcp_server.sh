@@ -13,15 +13,31 @@ PROJECT_NUMBER=$(gcloud projects describe "$GOOGLE_CLOUD_PROJECT" --format="valu
 SERVICE_ACCOUNT="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
 
 echo "============================================="
-1. Granting Cloud SQL Client role to Cloud Run service account...
+echo "1. Granting required roles to Cloud Run / Cloud Build service account..."
 echo "============================================="
 gcloud projects add-iam-policy-binding "$GOOGLE_CLOUD_PROJECT" \
     --member="serviceAccount:${SERVICE_ACCOUNT}" \
     --role="roles/cloudsql.client" \
     --quiet
 
+gcloud projects add-iam-policy-binding "$GOOGLE_CLOUD_PROJECT" \
+    --member="serviceAccount:${SERVICE_ACCOUNT}" \
+    --role="roles/storage.objectViewer" \
+    --quiet
+
+gcloud projects add-iam-policy-binding "$GOOGLE_CLOUD_PROJECT" \
+    --member="serviceAccount:${SERVICE_ACCOUNT}" \
+    --role="roles/logging.logWriter" \
+    --quiet
+
+gcloud projects add-iam-policy-binding "$GOOGLE_CLOUD_PROJECT" \
+    --member="serviceAccount:${SERVICE_ACCOUNT}" \
+    --role="roles/artifactregistry.writer" \
+    --quiet
+
+
 echo "============================================="
-2. Deploying MCP Server to Cloud Run...
+echo "2. Deploying MCP Server to Cloud Run..."
 echo "============================================="
 gcloud run deploy warehouse-mcp-server \
     --source mcp_server \
@@ -34,8 +50,9 @@ gcloud run deploy warehouse-mcp-server \
 # Retrieve and print the URL
 SERVICE_URL=$(gcloud run services describe warehouse-mcp-server --region us-central1 --format="value(status.url)")
 echo "============================================="
-Deployment complete!
-Your MCP Server URL: ${SERVICE_URL}
-Set this as environment variable for registration:
-export MCP_SERVER_URL=\"${SERVICE_URL}/sse\"
+echo "Deployment complete!"
+echo "Your MCP Server URL: ${SERVICE_URL}"
+echo "Set this as environment variable for registration:"
+echo "export MCP_SERVER_URL=\"${SERVICE_URL}/sse\""
 echo "============================================="
+

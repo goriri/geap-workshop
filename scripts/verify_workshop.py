@@ -18,8 +18,23 @@ async def run_local_verification(project, mcp_url):
     print(f"Initializing Gemini Client (Project: {project}, Location: global)...")
     client = genai.Client(vertexai=True, project=project, location="global")
 
+    headers = {}
+    if mcp_url.startswith("https://") and ".run.app" in mcp_url:
+        try:
+            print("Fetching OIDC token for Cloud Run authentication...")
+            import google.auth
+            from google.auth.transport.requests import Request
+            import google.oauth2.id_token
+            # Use base URL as audience
+            audience = mcp_url.split("/sse")[0]
+            token = google.oauth2.id_token.fetch_id_token(Request(), audience)
+            headers["Authorization"] = f"Bearer {token}"
+            print("Successfully retrieved OIDC authentication token.")
+        except Exception as e:
+            print(f"Warning: Could not fetch OIDC token: {e}")
+
     print(f"Connecting to MCP SSE server at {mcp_url}...")
-    async with sse_client(url=mcp_url) as (read_stream, write_stream):
+    async with sse_client(url=mcp_url, headers=headers) as (read_stream, write_stream):
         async with ClientSession(read_stream, write_stream) as session:
             await session.initialize()
             
