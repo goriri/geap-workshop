@@ -31,6 +31,38 @@ gcloud config set project $GOOGLE_CLOUD_PROJECT
 
 ---
 
+## GCP Project & IAM Setup
+
+If you are using a new GCP project, you must enable the required Google Cloud APIs and ensure your user account has the appropriate permissions.
+
+### 1. Required IAM Roles
+The user account running this workshop requires the following IAM roles on the project:
+* **Project IAM Admin** (`roles/resourcemanager.projectIamAdmin`) - to configure Service Account permissions.
+* **Cloud Run Admin** (`roles/run.admin`) - to deploy the MCP server.
+* **Cloud SQL Admin** (`roles/cloudsql.admin`) - to create and manage the PostgreSQL database.
+* **Vertex AI Administrator** (`roles/aiplatform.admin`) - to create and run agents.
+* **Service Usage Admin** (`roles/serviceusage.serviceUsageAdmin`) - to enable Google Cloud APIs.
+* **Storage Admin** (`roles/storage.admin`) - to create storage buckets for container builds.
+* **Artifact Registry Administrator** (`roles/artifactregistry.admin`) - to store the built container images.
+
+> [!NOTE]
+> If you have the **Owner** (`roles/owner`) role on the project, you already have all the necessary permissions.
+
+### 2. Enable Required APIs
+Run the following command to enable all the necessary APIs:
+```bash
+gcloud services enable \
+    sqladmin.googleapis.com \
+    run.googleapis.com \
+    artifactregistry.googleapis.com \
+    aiplatform.googleapis.com \
+    agentregistry.googleapis.com \
+    cloudbuild.googleapis.com \
+    serviceusage.googleapis.com
+```
+
+---
+
 ## 1. Setup Virtual Environment & Install Dependencies
 
 Create and activate a python virtual environment, then install dependencies:
