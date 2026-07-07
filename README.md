@@ -79,12 +79,17 @@ pip install -r requirements.txt
 
 ## 2. Step 1: Create Cloud SQL DB & Seed Data
 
-1. Run the database setup script to create a Cloud SQL PostgreSQL instance (`warehouse-db`), configure the database name (`warehouse`), and grant roles:
+1. Run the database creation script. This script will provision a new Cloud SQL PostgreSQL instance named `warehouse-db`, create a database named `warehouse`, create tables, and seed the initial inventory data:
    ```bash
-   python3 scripts/setup_db.py
+   bash scripts/create_db.sh
    ```
-2. Once completed, start the Cloud SQL Auth Proxy in the background to allow local database access (optional for manual queries):
+2. (Optional) If you want to connect to the database locally for manual queries, download and start the Cloud SQL Auth Proxy:
    ```bash
+   # Download the proxy
+   curl -o cloud-sql-proxy https://storage.googleapis.com/cloud-sql-connectors/v2.11.0/linux/amd64/cloud-sql-proxy
+   chmod +x cloud-sql-proxy
+   
+   # Start the proxy in the background
    ./cloud-sql-proxy $GOOGLE_CLOUD_PROJECT:us-central1:warehouse-db --port 5433 &
    ```
 
