@@ -22,12 +22,9 @@ async def run_local_verification(project, mcp_url):
     if mcp_url.startswith("https://") and ".run.app" in mcp_url:
         try:
             print("Fetching OIDC token for Cloud Run authentication...")
-            import google.auth
-            from google.auth.transport.requests import Request
-            import google.oauth2.id_token
-            # Use base URL as audience
-            audience = mcp_url.split("/sse")[0]
-            token = google.oauth2.id_token.fetch_id_token(Request(), audience)
+            import subprocess
+            cmd = ["gcloud", "auth", "print-identity-token"]
+            token = subprocess.check_output(cmd, text=True).strip()
             headers["Authorization"] = f"Bearer {token}"
             print("Successfully retrieved OIDC authentication token.")
         except Exception as e:
@@ -143,17 +140,18 @@ async def run_local_verification(project, mcp_url):
 
 def run_remote_verification(project, agent_id):
     print(f"Initializing Gemini Client for Remote Agent (Project: {project}, Location: global)...")
-    client = genai.Client(vertexai=True, project=project, location="global")
+    client = genai.Client(vertexai=True, project=project, location="global", http_options={"timeout": 1200000})
 
-    # Create a new environment/session
-    env_id = f"verification-env-{int(time.time())}"
+    # Use the 'remote' environment alias for the first interaction
+    env_id = "remote"
     print(f"Session environment initialized: {env_id}")
 
     # Helper function to send interaction
     def converse(prompt):
+        nonlocal env_id
         print(f"\nUser: {prompt}")
         interaction = client.interactions.create(
-            agent=agent_id,
+            agent=f"projects/{project}/locations/global/agents/{agent_id}",
             environment=env_id,
             input=prompt,
             background=True
@@ -166,6 +164,10 @@ def run_remote_verification(project, agent_id):
             time.sleep(2)
         print(f"Agent: {interaction.output_text.strip() if interaction.output_text else ''}")
         print(f"[Interaction ID: {interaction.id}]")
+        
+        # Update env_id for the next turn to maintain state
+        env_id = interaction.environment_id
+        
         return interaction.id
 
     # Action 1: List inventory

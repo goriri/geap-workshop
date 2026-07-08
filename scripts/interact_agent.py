@@ -11,7 +11,7 @@ def main():
 
     agent_id = "warehouse-manager"
     print(f"Initializing Gemini Client (Project: {project}, Location: global)...")
-    client = genai.Client(vertexai=True, project=project, location="global")
+    client = genai.Client(vertexai=True, project=project, location="global", http_options={"timeout": 1200000})
 
     print("\n" + "="*60)
     print("Welcome to the GEAP Warehouse Manager Agent CLI Client!")
@@ -36,7 +36,7 @@ def main():
             
             # Send message to agent
             interaction = client.interactions.create(
-                agent=agent_id,
+                agent=f"projects/{project}/locations/global/agents/{agent_id}",
                 input=user_input,
                 environment=environment,
                 background=True

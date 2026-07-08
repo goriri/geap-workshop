@@ -2,6 +2,13 @@
 
 This workshop demonstrates the capabilities of the **Gemini Enterprise Agent Platform (GEAP)**. It builds a stateful **Warehouse Management Agent** that queries a Cloud SQL database through an MCP (Model Context Protocol) server running on Cloud Run, reasons over customer requests, and performs transactions.
 
+### Key Capabilities Demoed
+* **Native MCP Server Integration:** Connecting remote Model Context Protocol (MCP) servers securely to a cloud-managed agent.
+* **FastMCP Tool Generation:** Effortlessly generating standardized MCP schemas from simple, type-hinted Python functions.
+* **Stateful Tool Calling:** Demonstrating an agent's ability to reason, invoke tools sequentially, evaluate responses, and take conditional actions (e.g., verifying stock before allowing an order).
+* **Local Emulation:** Rapidly developing and testing agents locally without the overhead of cloud deployment cycles.
+* **Agent Provisioning:** Utilizing Vertex AI Agent Engine to create persistent, cloud-managed agents.
+
 ---
 
 ## Architecture Overview
@@ -170,9 +177,7 @@ pip install -r requirements.txt
 Choose **Option A (Local Emulation - Recommended)** or **Option B (Cloud Managed Agent)** depending on your GCP organizational permissions:
 
 ### Option A: Local Agent Emulation (Works out-of-the-box)
-Certain preview/sandbox projects contain policies that block the remote provisioning of Dialogflow CX agent containers (causing `agents.create` LROs to return `ABORTED`). 
-
-In Local Emulation, you bypass cloud-provisioning completely. The **Local Agent Client** runs the conversational and function-calling loop directly on your workstation using the standard Gemini API (`gemini-3.5-flash`), loading tool specifications directly from your deployed Cloud Run MCP server.
+In Local Emulation, you bypass cloud-provisioning completely. The **Local Agent Client** runs the conversational and function-calling loop directly on your workstation using the standard Gemini API (`gemini-3.5-flash`), loading tool specifications directly from your deployed Cloud Run MCP server. This is the recommended approach for rapid local development and testing before pushing an agent to production.
 
 ```bash
 export MCP_SERVER_URL="YOUR_CLOUD_RUN_SSE_URL"
@@ -209,7 +214,7 @@ python3 scripts/local_agent.py
 ---
 
 ### Option B: Cloud-Managed Agent
-If your project has full GEAP provisioning enablement, you can create a permanent cloud-managed agent.
+You can also create a permanent cloud-managed agent hosted by Vertex AI Agent Engine. Because your Cloud Run MCP server is protected by Google Cloud IAM (Domain Restricted Sharing), the Agent Platform requires valid credentials to connect to it.
 
 ```bash
 export MCP_SERVER_URL="YOUR_CLOUD_RUN_SSE_URL"
@@ -218,20 +223,25 @@ python3 scripts/interact_agent.py
 ```
 
 #### What is Executed:
-* **Agent Provisioning:** Initiates a call to the Vertex AI Agent Engine (`client.agents.create`) using the base agent model (`antigravity-preview-05-2026`). It registers your Cloud Run MCP server URL as a remote toolset.
+* **Token Retrieval & Injection:** Dynamically fetches a Google Identity token via `gcloud auth print-identity-token` and injects it into the `headers` field of the `mcp_server` tool definition. This allows Vertex AI Agent Engine to authenticate with the Cloud Run service.
+* **Agent Provisioning:** Initiates a call to the Vertex AI Agent Engine (`client.agents.create`) using the base agent model (`antigravity-preview-05-2026`). It registers your Cloud Run MCP server URL and injected headers as a remote toolset.
 * **Operation Polling:** It monitors and polls the long-running operation until the agent container is fully ready.
 
 #### Key Lines in Code:
-* **Configuring Connection Timeouts & Creating Agent (`scripts/create_agent.py`):**
+* **Configuring MCP Server Authentication (`scripts/create_agent.py`):**
   ```python
-  # Configure a 20-minute client timeout to allow backend container provisioning
-  client = genai.Client(vertexai=True, project=project, location="global", http_options={"timeout": 1200000})
-
+  token = subprocess.check_output(["gcloud", "auth", "print-identity-token"]).decode().strip()
+  
   operation = client.agents.create(
       id="warehouse-manager",
       base_agent="antigravity-preview-05-2026",
       system_instruction="You are a warehouse management assistant...",
-      tools=[{"type": "mcp_server", "name": "warehouse-db", "url": mcp_url}],
+      tools=[{
+          "type": "mcp_server", 
+          "name": "warehouse-db", 
+          "url": mcp_url,
+          "headers": {"Authorization": f"Bearer {token}"}
+      }],
       timeout=1200 # Overrides default method timeout (20 mins)
   )
   ```
