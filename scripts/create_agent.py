@@ -48,10 +48,6 @@ def main():
     print(f"Initializing Gemini Client for Vertex AI (Project: {project}, Location: global)...")
     client = genai.Client(vertexai=True, project=project, location="global", http_options={"timeout": 1200000})
 
-    print("Fetching gcloud identity token for Agent Engine authentication...")
-    token = subprocess.check_output(["gcloud", "auth", "print-identity-token"]).decode().strip()
-    mcp_domain = urllib.parse.urlparse(mcp_url).hostname
-
     # 1. Clean up existing agent if it exists
     print(f"Attempting to delete any existing agent '{agent_id}' to start fresh...")
     try:
@@ -87,12 +83,14 @@ def main():
                 {
                     "type": "mcp_server",
                     "name": "warehouse-db",
-                    "url": mcp_url,
-                    "headers": {
-                        "Authorization": f"Bearer {token}"
-                    }
+                    "url": mcp_url
                 }
             ],
+            base_environment={
+                "network": {
+                    "allowlist": [{"domain": "*"}]
+                }
+            },
             timeout=1200
         )
         print(f"Agent creation operation started: {operation.name}")
