@@ -87,6 +87,7 @@ def main():
                 }
             ],
             base_environment={
+                "type": "remote",
                 "network": {
                     "allowlist": [{"domain": "*"}]
                 }
