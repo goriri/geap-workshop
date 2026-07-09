@@ -41,4 +41,4 @@ fi
 echo "============================================="
 echo "3. Running Table Creation and Seeding..."
 echo "============================================="
-python3 scripts/setup_db.py
+venv/bin/python3 scripts/setup_db.py
