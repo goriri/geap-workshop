@@ -23,14 +23,34 @@ except Exception as e:
     print('Agent deletion skipped or failed:', e)
 "
 
-# 2. Delete Cloud Run Service
+# 2. Delete Deployed Reasoning Engines (ADK & LangChain Agents)
+echo "Deleting all deployed Reasoning Engines in us-central1..."
+venv/bin/python3 -c "
+import os
+import google.auth
+from google.cloud import aiplatform
+from vertexai.preview import reasoning_engines
+try:
+    project = os.environ.get('GOOGLE_CLOUD_PROJECT')
+    if not project:
+        raise ValueError('GOOGLE_CLOUD_PROJECT env var is not set.')
+    aiplatform.init(project=project, location='us-central1')
+    engines = reasoning_engines.ReasoningEngine.list()
+    for e in engines:
+        print(f'Deleting Reasoning Engine: {e.resource_name}')
+        e.delete()
+except Exception as e:
+    print('Reasoning Engine deletion skipped or failed:', e)
+"
+
+# 3. Delete Cloud Run Service
 echo "Deleting Cloud Run service 'warehouse-mcp-server'..."
 gcloud run services delete warehouse-mcp-server \
     --region=us-central1 \
     --quiet \
     --project=$GOOGLE_CLOUD_PROJECT
 
-# 3. Delete Cloud SQL Instance
+# 4. Delete Cloud SQL Instance
 echo "Deleting Cloud SQL instance 'warehouse-db' (this can take a few minutes)..."
 gcloud sql instances delete warehouse-db \
     --quiet \

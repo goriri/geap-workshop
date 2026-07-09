@@ -282,6 +282,45 @@ python3 scripts/interact_adk_agent.py
 
 ---
 
+### Option D: Deploying LangChain Agents on Vertex AI (Reasoning Engine)
+
+Vertex AI Reasoning Engine also natively supports deploying LangChain agents using the pre-built `vertexai.preview.reasoning_engines.LangchainAgent` template class. Under the hood, this compiles your prompt templates, ChatVertexAI model configs, and Python function tools into a structured LangChain `AgentExecutor`.
+
+We provide a complete sample in `scripts/langchain_agent.py`.
+
+#### 1. How to Test the LangChain Agent Locally:
+Verify that the model correctly binds your tools and queries locally:
+```bash
+source venv/bin/activate
+export GOOGLE_CLOUD_PROJECT="YOUR_PROJECT_ID"
+python3 scripts/langchain_agent.py
+```
+
+#### 2. How to Deploy the LangChain Agent to Vertex AI:
+Deploy the compiled LangChain graph to the cloud under Reasoning Engine:
+```bash
+source venv/bin/activate
+export GOOGLE_CLOUD_PROJECT="YOUR_PROJECT_ID"
+export STAGING_BUCKET="gs://staging.YOUR_PROJECT_ID.appspot.com"
+python3 scripts/langchain_agent.py --deploy
+```
+This will output the remote resource name of your deployed LangChain agent:
+`Resource Name: projects/YOUR_PROJECT_NUMBER/locations/us-central1/reasoningEngines/YOUR_ENGINE_ID`
+
+#### 3. How to Query the Deployed LangChain Agent:
+You can load the remote agent by its ID and query it from any script:
+```python
+import vertexai
+from vertexai.preview import reasoning_engines
+
+vertexai.init(project="YOUR_PROJECT_ID", location="us-central1")
+agent = reasoning_engines.ReasoningEngine("projects/YOUR_PROJECT_NUMBER/locations/us-central1/reasoningEngines/YOUR_ENGINE_ID")
+response = agent.query(input="How many letters are in the word supercalifragilisticexpialidocious?")
+print(response)
+```
+
+---
+
 ## 5. Verify the Workshop Scenarios
 
 Run the automated verification script to execute the five warehouse scenarios sequentially.
@@ -313,7 +352,7 @@ The script automates five stateful interactions with the agent to verify databas
 
 ---
 
-## 6. Step 4: Observability & Agent Management
+## 6. Observability & Agent Management
 
 To monitor your agent's health, view traces, and inspect execution logs directly:
 
@@ -324,7 +363,7 @@ To monitor your agent's health, view traces, and inspect execution logs directly
   ```
 * **Console Monitoring:** Monitor live health, tool executions, and billing details directly within the Google Cloud Console under the **Gemini Enterprise -> Agent Platform** menu.
 
-### For Reasoning Engine / ADK Agents (Option C):
+### For Reasoning Engine / ADK Agents (Option C & D):
 * **Console Location:**
   1. Navigate to the Google Cloud Console.
   2. Select your project.
@@ -342,7 +381,7 @@ To monitor your agent's health, view traces, and inspect execution logs directly
 
 ---
 
-## 7. Step 5: Connect the Agent to Gemini Enterprise
+## 7. Connect the Agent to Gemini Enterprise
 
 To expose your custom warehouse manager agent to corporate users in the Gemini Enterprise workspace:
 1. Open the Google Cloud Console and navigate to **Gemini Enterprise**.
