@@ -18,11 +18,13 @@ def main():
         
     if mcp_url.endswith("/sse"):
         mcp_url = mcp_url[:-4]
+    if not mcp_url.endswith("/mcp"):
+        mcp_url = f"{mcp_url}/mcp"
         
     audience = mcp_url
-    sse_url = f"{mcp_url}/sse"
+    sse_url = mcp_url
 
-    agent_id = "warehouse-manager-net-only"
+    agent_id = "warehouse-assistant-public-v3"
     print(f"Initializing Gemini Client (Project: {project}, Location: global)...")
     client = genai.Client(vertexai=True, project=project, location="global", http_options={"timeout": 1200000})
 
@@ -54,23 +56,13 @@ def main():
 
             print("\nThinking...")
             
-            # Dynamically fetch a fresh OIDC token for the Cloud Run MCP Server
-            print("[Fetching fresh OIDC token for MCP Server...]")
-            token = google.oauth2.id_token.fetch_id_token(Request(), audience)
-            
-            # Send message to agent, injecting the tools with the fresh token
+            # Send message to agent, relying on agent's static tools configuration
             interaction = client.interactions.create(
                 agent=agent_name,
                 input=user_input,
                 environment=environment,
                 background=True,
                 timeout=600.0,
-                tools=[{
-                    "type": "mcp_server",
-                    "name": "warehouse-db",
-                    "url": sse_url,
-                    "headers": {"Authorization": f"Bearer {token}"}
-                }]
             )
             print(f"[Interaction ID: {interaction.id}]")
             

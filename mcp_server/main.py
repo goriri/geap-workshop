@@ -151,11 +151,11 @@ def create_order(product_id: int, quantity: int, customer_name: str) -> str:
         logger.error(f"Error creating order: {e}")
         return f"Error creating order: {str(e)}"
 
-# Start the Starlette SSE app when run directly
+# Start the Starlette Streamable HTTP app when run directly
 if __name__ == "__main__":
     import uvicorn
-    # Starlette app serving SSE
-    app = mcp.sse_app()
+    # Starlette app serving Streamable HTTP
+    app = mcp.streamable_http_app()
     port = int(os.environ.get("PORT", 8080))
-    logger.info(f"Starting MCP SSE server on port {port}")
+    logger.info(f"Starting MCP Streamable HTTP server on port {port}")
     uvicorn.run(app, host="0.0.0.0", port=port)

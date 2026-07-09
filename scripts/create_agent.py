@@ -6,24 +6,40 @@ from google import genai
 import google.auth
 import google.auth.transport.requests
 
-client = genai.Client(vertexai=True, project=os.environ["GOOGLE_CLOUD_PROJECT"], location="global")
+client = genai.Client(vertexai=True, project=os.environ["GOOGLE_CLOUD_PROJECT"], location="global", http_options={"timeout": 120.0})
 
 mcp_server_url = os.environ.get("MCP_SERVER_URL")
 if not mcp_server_url:
     print("Please set MCP_SERVER_URL environment variable.")
     sys.exit(1)
 
-# Ensure URL does not end with /sse
+# Ensure URL ends with /mcp
 if mcp_server_url.endswith("/sse"):
     mcp_server_url = mcp_server_url[:-4]
+if not mcp_server_url.endswith("/mcp"):
+    mcp_server_url = f"{mcp_server_url}/mcp"
 
 print(f"Creating remote agent with MCP server at {mcp_server_url}...")
 
 operation = client.agents.create(
-    id="warehouse-assistant-v2",
+    id="warehouse-assistant-public-v3",
     base_agent="antigravity-preview-05-2026",
     description="An AI assistant that can manage a warehouse inventory and create customer orders.",
-    system_instruction="You are a helpful warehouse assistant. You can look up inventory and create orders. When asked to create an order, always check the stock first. If the stock is available, create the order and tell the user the new stock level."
+    system_instruction="You are a helpful warehouse assistant. You can look up inventory and create orders. When asked to create an order, always check the stock first. If the stock is available, create the order and tell the user the new stock level.",
+    tools=[{
+        "type": "mcp_server",
+        "name": "warehouse-db",
+        "url": mcp_server_url
+    }],
+    base_environment={
+        "type": "remote",
+        "network": {
+            "allowlist": [
+                {"domain": "*"}
+            ]
+        }
+    },
+    timeout=120.0
 )
 
 print(f"Agent creation initiated: {operation.name}")
