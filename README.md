@@ -377,6 +377,20 @@ To monitor your agent's health, view traces, and inspect execution logs directly
      resource.labels.reasoning_engine_id="ENGINE_ID"
      ```
   3. Click **Run query** to view execution traces and output logs from python code runs in real time.
+* **OpenTelemetry Metrics (Cloud Monitoring):**
+  Deployed Reasoning Engines automatically publish execution telemetry metrics to Cloud Monitoring when environment variables `GOOGLE_CLOUD_AGENT_ENGINE_ENABLE_TELEMETRY="true"` are configured.
+  To inspect these metrics:
+  1. Go to the **Metrics Explorer** page in Google Cloud Console.
+  2. In the metric selection query bar, search for **Gemini Enterprise Agent Platform Reasoning Engine** (associated with resource type `aiplatform.googleapis.com/ReasoningEngine`).
+  3. Select a metric from the options:
+     - **Request count**: Rate of incoming queries.
+     - **Request latencies**: Execution duration histograms.
+     - **Container CPU/Memory allocation**: Resource utilization metrics.
+  4. For advanced analysis, toggle the PromQL query mode and query raw values, e.g.:
+     ```promql
+     sum_over_time(increase(aiplatform_googleapis_com:reasoning_engine_request_count{reasoning_engine_id="ENGINE_ID"}[1h]))
+     ```
+
 
 
 ---

@@ -120,7 +120,7 @@ class WarehouseAgentReasoningEngine:
 # Deploy and Local Test Entry Point
 def deploy_agent(project_id: str, location: str, mcp_url: str, staging_bucket: str):
     from google.cloud import aiplatform
-    from vertexai.preview import reasoning_engines
+    from vertexai import agent_engines
     
     print(f"Initializing aiplatform (Project: {project_id}, Location: {location})...")
     aiplatform.init(project=project_id, location=location, staging_bucket=staging_bucket)
@@ -130,9 +130,9 @@ def deploy_agent(project_id: str, location: str, mcp_url: str, staging_bucket: s
     
     print("Deploying Reasoning Engine to Vertex AI...")
     try:
-        # Deploy using ReasoningEngine.create
-        reasoning_engine = reasoning_engines.ReasoningEngine.create(
-            reasoning_engine=agent_instance,
+        # Deploy using agent_engines.create
+        reasoning_engine = agent_engines.create(
+            agent_engine=agent_instance,
             requirements=[
                 "google-cloud-aiplatform",
                 "google-genai",
@@ -142,6 +142,11 @@ def deploy_agent(project_id: str, location: str, mcp_url: str, staging_bucket: s
             ],
             display_name="warehouse-assistant-adk",
             extra_packages=[],
+            env_vars={
+                "GOOGLE_CLOUD_AGENT_ENGINE_ENABLE_TELEMETRY": "true",
+                "OTEL_SEMCONV_STABILITY_OPT_IN": "gen_ai_latest_experimental",
+                "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT": "EVENT_ONLY",
+            }
         )
         print("\n====================================================")
         print("Reasoning Engine Deployed Successfully!")
