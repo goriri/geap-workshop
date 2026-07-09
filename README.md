@@ -315,11 +315,30 @@ The script automates five stateful interactions with the agent to verify databas
 
 ## 6. Step 4: Observability & Agent Management
 
-* **Observability (Cloud Managed Agent only):** Retrieves the precise reasoning trace and tool execution metadata of the last transaction session:
+To monitor your agent's health, view traces, and inspect execution logs directly:
+
+### For Cloud-Managed Agents (Option B):
+* **Trace Extraction:** Retrieve the precise reasoning trace and tool execution metadata of the last transaction session:
   ```bash
   python3 scripts/observe_agent.py
   ```
-* **Console Monitoring:** Monitor your agent's live health, tool executions, and billing details directly within the Google Cloud Console under the **Gemini Enterprise -> Agent Platform** menu.
+* **Console Monitoring:** Monitor live health, tool executions, and billing details directly within the Google Cloud Console under the **Gemini Enterprise -> Agent Platform** menu.
+
+### For Reasoning Engine / ADK Agents (Option C):
+* **Console Location:**
+  1. Navigate to the Google Cloud Console.
+  2. Select your project.
+  3. Search for **Vertex AI** and open the dashboard.
+  4. In the left navigation pane under **Deploy and Use** or **Developer Tools**, click on **Reasoning Engine** (or **Agent Engine**). Deployed instances are listed here.
+* **Logs Inspection (Cloud Logging):**
+  1. Open the **Logs Explorer** in Google Cloud Console.
+  2. Enter the following query to retrieve stderr and stdout logs from your Reasoning Engine container (replace `ENGINE_ID` with your deployed instance ID):
+     ```query
+     resource.type="aiplatform.googleapis.com/ReasoningEngine"
+     resource.labels.reasoning_engine_id="ENGINE_ID"
+     ```
+  3. Click **Run query** to view execution traces and output logs from python code runs in real time.
+
 
 ---
 
