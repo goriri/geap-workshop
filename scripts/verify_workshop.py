@@ -227,6 +227,43 @@ def run_remote_verification(project, agent_id):
 
     print_banner("Verification flow completed successfully!")
 
+def run_adk_verification(project, engine_name):
+    print_banner("Running ADK Reasoning Engine Verification")
+    from google.cloud import aiplatform
+    from vertexai.preview import reasoning_engines
+    
+    print(f"Initializing SDK & loading Reasoning Engine: {engine_name}...")
+    aiplatform.init(project=project)
+    agent = reasoning_engines.ReasoningEngine(engine_name)
+    
+    # Helper to converse
+    def converse(prompt):
+        print(f"\nUser: {prompt}")
+        response = agent.query(query=prompt)
+        print(f"Agent: {response}")
+        
+    # Action 1: List inventory
+    print_banner("1. Listing Initial Inventory")
+    converse("List all items in the warehouse inventory.")
+
+    # Action 2: Check current stock of Antigravity Boots (ID 3)
+    print_banner("2. Querying Stock of Product ID 3")
+    converse("Check the current stock level of Antigravity Boots (Product ID 3).")
+
+    # Action 3: Try to place an order that exceeds stock
+    print_banner("3. Attempting Invalid Order (Excessive Stock)")
+    converse("Place an order for 1000 Antigravity Boots for customer 'Verification Test'.")
+
+    # Action 4: Place a valid order
+    print_banner("4. Placing Valid Order (5 Units)")
+    converse("Place an order for 5 Antigravity Boots for customer 'Verification Test'.")
+
+    # Action 5: Verify stock has decreased
+    print_banner("5. Verifying Stock Decreased")
+    converse("Check the stock level of Antigravity Boots again to make sure it went down.")
+
+    print_banner("Verification flow completed successfully!")
+
 def main():
     project = os.environ.get("GOOGLE_CLOUD_PROJECT")
     if not project:
@@ -238,9 +275,17 @@ def main():
 
     parser = argparse.ArgumentParser(description="Verify the GEAP Warehouse Management Agent.")
     parser.add_argument("--remote", action="store_true", help="Run verification using the remote cloud managed agent.")
+    parser.add_argument("--adk", type=str, help="Run verification using the deployed ADK Reasoning Engine (pass resource name or ID).")
     args = parser.parse_args()
 
-    if args.remote:
+    if args.adk:
+        # Resolve full resource name if only ID is provided
+        engine_name = args.adk
+        if not engine_name.startswith("projects/"):
+            # Fetch default locations
+            engine_name = f"projects/181550378089/locations/us-central1/reasoningEngines/{args.adk}"
+        run_adk_verification(project, engine_name)
+    elif args.remote:
         run_remote_verification(project, agent_id)
     else:
         print("Running in LOCAL agent emulation mode...")

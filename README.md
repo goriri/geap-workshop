@@ -248,6 +248,40 @@ python3 scripts/interact_agent.py
 
 ---
 
+### Option C: Vertex AI Reasoning Engine (ADK Python Agent)
+Alternatively, you can package the agent inside a custom Python class and deploy it using the **Vertex AI Reasoning Engine (ADK)**. 
+
+Because Reasoning Engine uploads the pickled python code and installs custom requirements in a pre-built container in the cloud, it is a robust alternative when you need direct control over the execution loop and dependency configuration. It is also more resilient during platform-level Tenant Project Pool outages.
+
+#### 1. How to Test the ADK Agent Locally:
+You can verify the agent class structure entirely locally (which mocks the remote container execution path):
+```bash
+source venv/bin/activate
+export GOOGLE_CLOUD_PROJECT="YOUR_PROJECT_ID"
+python3 scripts/adk_agent.py
+```
+
+#### 2. How to Deploy the ADK Agent to Vertex AI:
+To deploy the Python class as a remote Reasoning Engine:
+```bash
+source venv/bin/activate
+export GOOGLE_CLOUD_PROJECT="YOUR_PROJECT_ID"
+export STAGING_BUCKET="gs://staging.YOUR_PROJECT_ID.appspot.com" # Staging bucket to upload pickle files
+python3 scripts/adk_agent.py --deploy
+```
+This will print the successfully deployed resource name (e.g. `projects/YOUR_PROJECT_NUMBER/locations/us-central1/reasoningEngines/YOUR_ENGINE_ID`).
+
+#### 3. How to Interact with the Deployed Remote Agent:
+We provide an interactive CLI client script to query and chat with the deployed remote agent:
+```bash
+source venv/bin/activate
+export GOOGLE_CLOUD_PROJECT="YOUR_PROJECT_ID"
+export REASONING_ENGINE_NAME="YOUR_DEPLOYED_REASONING_ENGINE_RESOURCE_NAME"
+python3 scripts/interact_adk_agent.py
+```
+
+---
+
 ## 5. Verify the Workshop Scenarios
 
 Run the automated verification script to execute the five warehouse scenarios sequentially.
@@ -262,6 +296,12 @@ To run verification using the **Cloud-Managed Agent** (Option B):
 ```bash
 python3 scripts/verify_workshop.py --remote
 ```
+
+To run verification using the **Reasoning Engine ADK Agent** (Option C):
+```bash
+python3 scripts/verify_workshop.py --adk "YOUR_DEPLOYED_REASONING_ENGINE_RESOURCE_NAME_OR_ID"
+```
+
 
 ### What is Executed:
 The script automates five stateful interactions with the agent to verify database transactions and tool calling:
