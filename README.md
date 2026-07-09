@@ -282,13 +282,13 @@ python3 scripts/interact_adk_agent.py
 
 ---
 
-### Option D: Deploying LangChain Agents on Vertex AI (Reasoning Engine)
+## 5. Deploy an Existing LangChain Agent on Agent Platform
 
-Vertex AI Reasoning Engine also natively supports deploying LangChain agents using the pre-built `vertexai.preview.reasoning_engines.LangchainAgent` template class. Under the hood, this compiles your prompt templates, ChatVertexAI model configs, and Python function tools into a structured LangChain `AgentExecutor`.
+Alternatively, you can deploy an existing LangChain agent using the pre-built `vertexai.preview.reasoning_engines.LangchainAgent` template class. Under the hood, this compiles your prompt templates, ChatVertexAI model configs, and Python function tools into a structured LangChain `AgentExecutor`.
 
 We provide a complete sample in `scripts/langchain_agent.py`.
 
-#### 1. How to Test the LangChain Agent Locally:
+### 1. How to Test the LangChain Agent Locally:
 Verify that the model correctly binds your tools and queries locally:
 ```bash
 source venv/bin/activate
@@ -296,7 +296,7 @@ export GOOGLE_CLOUD_PROJECT="YOUR_PROJECT_ID"
 python3 scripts/langchain_agent.py
 ```
 
-#### 2. How to Deploy the LangChain Agent to Vertex AI:
+### 2. How to Deploy the LangChain Agent to Vertex AI:
 Deploy the compiled LangChain graph to the cloud under Reasoning Engine:
 ```bash
 source venv/bin/activate
@@ -307,7 +307,7 @@ python3 scripts/langchain_agent.py --deploy
 This will output the remote resource name of your deployed LangChain agent:
 `Resource Name: projects/YOUR_PROJECT_NUMBER/locations/us-central1/reasoningEngines/YOUR_ENGINE_ID`
 
-#### 3. How to Query the Deployed LangChain Agent:
+### 3. How to Query the Deployed LangChain Agent:
 You can load the remote agent by its ID and query it from any script:
 ```python
 import vertexai
@@ -321,7 +321,7 @@ print(response)
 
 ---
 
-## 5. Verify the Workshop Scenarios
+## 6. Verify the Workshop Scenarios
 
 Run the automated verification script to execute the five warehouse scenarios sequentially.
 
@@ -352,7 +352,7 @@ The script automates five stateful interactions with the agent to verify databas
 
 ---
 
-## 6. Observability & Agent Management
+## 7. Observability & Agent Management
 
 To monitor your agent's health, view traces, and inspect execution logs directly:
 
@@ -381,7 +381,7 @@ To monitor your agent's health, view traces, and inspect execution logs directly
 
 ---
 
-## 7. Connect the Agent to Gemini Enterprise
+## 8. Connect the Agent to Gemini Enterprise
 
 To expose your custom warehouse manager agent to corporate users in the Gemini Enterprise workspace:
 1. Open the Google Cloud Console and navigate to **Gemini Enterprise**.
@@ -394,7 +394,7 @@ To expose your custom warehouse manager agent to corporate users in the Gemini E
 
 ---
 
-## 8. Cleanup
+## 9. Cleanup
 
 To delete all Cloud SQL instances, Cloud Run services, and Agent registry entries created during the workshop:
 ```bash
