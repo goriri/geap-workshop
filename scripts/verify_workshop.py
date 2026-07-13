@@ -166,9 +166,13 @@ def run_remote_verification(project, agent_id):
             background=True
         )
         # Poll for completion (API returns lowercase statuses, e.g. "completed")
+        start = time.time()
         while True:
             interaction = client.interactions.get(id=interaction.id)
-            if (interaction.status or "").lower() in ["succeeded", "failed", "cancelled", "completed", "requires_action"]:
+            status = (interaction.status or "").lower()
+            print(f"[{time.time() - start:.0f}s] Status: {status}   ", end="\r", flush=True)
+            if status in ["succeeded", "failed", "cancelled", "completed", "requires_action"]:
+                print()
                 break
             time.sleep(2)
         print()
