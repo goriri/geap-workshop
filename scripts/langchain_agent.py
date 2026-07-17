@@ -8,6 +8,7 @@ agent using Vertex AI Reasoning Engine (ADK).
 import argparse
 import os
 import sys
+import getpass
 import vertexai
 from vertexai.preview import reasoning_engines
 
@@ -76,6 +77,7 @@ def main():
     else:
         # 3. Deploy remotely
         print("\nDeploying LangChain agent to Vertex AI...")
+        username = getpass.getuser()
         remote_agent = reasoning_engines.ReasoningEngine.create(
             agent,
             requirements=[
@@ -84,7 +86,8 @@ def main():
                 "cloudpickle",
                 "pydantic",
             ],
-            display_name="Sample LangChain Agent",
+            display_name=f"{username}-sample-langchain-agent",
+            gcs_dir_name=f"{username}-langchain-agent",
             description="A sample LangChain-based agent deployed via Vertex AI Reasoning Engine.",
         )
         print("\n====================================================")

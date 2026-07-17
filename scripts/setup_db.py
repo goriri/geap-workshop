@@ -1,10 +1,12 @@
 import os
 import sys
+import getpass
 import sqlalchemy
 
 def main():
     project = os.environ.get("GOOGLE_CLOUD_PROJECT")
-    instance_name = os.environ.get("DB_INSTANCE", "warehouse-db")
+    username = getpass.getuser()
+    instance_name = os.environ.get("DB_INSTANCE", f"{username}-warehouse-db")
     region = os.environ.get("DB_REGION", "us-central1")
     db_user = os.environ.get("DB_USER", "postgres")
     db_pass = os.environ.get("DB_PASS", "super-secret-password")

@@ -75,6 +75,8 @@ gcloud services enable \
 
 ## 1. Setup Virtual Environment & Install Dependencies
 
+> **Business Goal**: Establish a clean, isolated Python runtime environment to ensure consistent package dependencies, preventing conflicts between workshop libraries and existing system-level packages.
+
 Create and activate a python virtual environment, then install dependencies:
 ```bash
 python3 -m venv venv
@@ -86,6 +88,8 @@ pip install -r requirements.txt
 
 ## 2. Step 1: Create Cloud SQL DB & Seed Data
 
+> **Business Goal**: Establish a secure, managed Cloud SQL database to act as our system of record, holding product inventories and customer orders. Prefixing the resources with your username ensures isolation so multiple users can run the workshop simultaneously in the same Google Cloud project.
+
 1. Run the database creation script:
    ```bash
    bash scripts/create_db.sh
@@ -95,7 +99,7 @@ pip install -r requirements.txt
    > Creating a new Cloud SQL instance can take **5 to 10 minutes** to provision on Google Cloud. Subsequent runs of this script will be instant as it skips creation if the instance already exists.
 
 ### What is Executed:
-* **Instance Creation:** Provisions a Cloud SQL PostgreSQL v15 database instance named `warehouse-db` in region `us-central1` utilizing the lightweight `db-f1-micro` tier.
+* **Instance Creation:** Provisions a Cloud SQL PostgreSQL v15 database instance named `${USER}-warehouse-db` in region `us-central1` utilizing the lightweight `db-f1-micro` tier.
 * **Database Setup:** Checks for and creates a PostgreSQL database called `warehouse`.
 * **Table Creation & Seeding:** Triggers `scripts/setup_db.py` to establish connection using the Cloud SQL Python Connector and schema seeding:
   * Drops any pre-existing tables to ensure a clean state.
@@ -105,7 +109,7 @@ pip install -r requirements.txt
 ### Key Lines in Code:
 * **Cloud SQL Instance Creation (`scripts/create_db.sh`):**
   ```bash
-  gcloud sql instances create "warehouse-db" \
+  gcloud sql instances create "${USER}-warehouse-db" \
       --database-version=POSTGRES_15 \
       --tier=db-f1-micro \
       --region="us-central1" \
@@ -115,11 +119,13 @@ pip install -r requirements.txt
 * **Database Seeding and Python Connection (`scripts/setup_db.py`):**
   ```python
   from google.cloud.sql.connector import Connector, IPTypes
+  import getpass
+  username = getpass.getuser()
   connector = Connector()
 
   def getconn():
       return connector.connect(
-          f"{project}:us-central1:warehouse-db",
+          f"{project}:us-central1:{username}-warehouse-db",
           "pg8000",
           user="postgres",
           password="super-secret-password",
@@ -134,13 +140,15 @@ pip install -r requirements.txt
 
 ## 3. Step 2: Deploy & Expose the MCP Server on Cloud Run
 
+> **Business Goal**: Package the database access logic into a standardized, web-accessible Model Context Protocol (MCP) server running on Cloud Run, and enroll the tools (such as `list_inventory` and `create_order`) into the Google Agent Registry. This establishes a secure interface enabling LLM agents to safely interact with database records.
+
 1. Build and deploy the FastMCP server code to Cloud Run, and set up database connection permissions:
    ```bash
    bash scripts/deploy_mcp_server.sh
    ```
    Save the output `MCP_SERVER_URL` in your terminal:
    ```bash
-   export MCP_SERVER_URL="https://warehouse-mcp-server-xxxx-uc.a.run.app/sse"
+   export MCP_SERVER_URL="https://${USER}-warehouse-mcp-server-xxxx-uc.a.run.app/sse"
    ```
 
 2. Register the deployed service in the Agent Registry:
@@ -150,7 +158,7 @@ pip install -r requirements.txt
 
 ### What is Executed:
 * **IAM Grants:** Finds your project number and grants the default Compute Engine service account (`{PROJECT_NUMBER}-compute@developer.gserviceaccount.com`) several critical roles (`roles/cloudsql.client`, `roles/storage.objectViewer`, `roles/logging.logWriter`, `roles/artifactregistry.writer`) so Cloud Build can read the sources, compile, and push the Docker container successfully.
-* **Cloud Run Deployment:** Deploys `warehouse-mcp-server` from the local `mcp_server` directory. It configures the Cloud Run instance to mount the Cloud SQL connection (`add-cloudsql-instances`) and sets connection variables (`DB_USER`, `DB_PASS`, `DB_NAME`, `INSTANCE_CONNECTION_NAME`).
+* **Cloud Run Deployment:** Deploys `${USER}-warehouse-mcp-server` from the local `mcp_server` directory. It configures the Cloud Run instance to mount the Cloud SQL connection (`add-cloudsql-instances`) and sets connection variables (`DB_USER`, `DB_PASS`, `DB_NAME`, `INSTANCE_CONNECTION_NAME`).
 * **Agent Registry Enrollment:** Executes `register_mcp_server.py` to register the MCP tools schema (e.g., `list_inventory`, `create_order`) with the Google Enterprise Agent Registry.
 
 ### Key Lines in Code:
@@ -162,17 +170,19 @@ pip install -r requirements.txt
   ```
 * **Cloud Run Server Deployment (`scripts/deploy_mcp_server.sh`):**
   ```bash
-  gcloud run deploy warehouse-mcp-server \
+  gcloud run deploy "${USER}-warehouse-mcp-server" \
       --source mcp_server \
       --region us-central1 \
-      --add-cloudsql-instances "${GOOGLE_CLOUD_PROJECT}:us-central1:warehouse-db" \
-      --set-env-vars "DB_USER=postgres,DB_PASS=super-secret-password,DB_NAME=warehouse,INSTANCE_CONNECTION_NAME=${GOOGLE_CLOUD_PROJECT}:us-central1:warehouse-db" \
+      --add-cloudsql-instances "${GOOGLE_CLOUD_PROJECT}:us-central1:${USER}-warehouse-db" \
+      --set-env-vars "DB_USER=postgres,DB_PASS=super-secret-password,DB_NAME=warehouse,INSTANCE_CONNECTION_NAME=${GOOGLE_CLOUD_PROJECT}:us-central1:${USER}-warehouse-db" \
       --allow-unauthenticated --quiet
   ```
 
 ---
 
 ## 4. Step 3: Run the Warehouse Agent
+
+> **Business Goal**: Implement and execute the core agent loop. Option A lets you test changes rapidly via local emulation, Option B deploys a secure, enterprise-grade cloud-hosted agent, and Option C packages the agent logic into a custom sandbox container using the Vertex AI ADK.
 
 Choose **Option A (Local Emulation - Recommended)** or **Option B (Cloud Managed Agent)** depending on your GCP organizational permissions:
 
@@ -230,15 +240,17 @@ python3 scripts/interact_agent.py
 #### Key Lines in Code:
 * **Configuring MCP Server Authentication (`scripts/create_agent.py`):**
   ```python
+  import getpass
+  username = getpass.getuser()
   token = subprocess.check_output(["gcloud", "auth", "print-identity-token"]).decode().strip()
   
   operation = client.agents.create(
-      id="warehouse-manager",
+      id=f"{username}-warehouse-manager",
       base_agent="antigravity-preview-05-2026",
       system_instruction="You are a warehouse management assistant...",
       tools=[{
           "type": "mcp_server", 
-          "name": "warehouse-db", 
+          "name": f"{username}-warehouse-db", 
           "url": mcp_url,
           "headers": {"Authorization": f"Bearer {token}"}
       }],
@@ -284,6 +296,8 @@ python3 scripts/interact_adk_agent.py
 
 ## 5. Deploy an Existing LangChain Agent on Agent Platform
 
+> **Business Goal**: Leverage the Vertex AI Agent Platform to deploy and run pre-existing LangChain agent workflows. This allows you to migrate legacy agent logic directly to production-grade managed infrastructure while preserving investments in existing LangChain orchestration code.
+
 Alternatively, you can deploy an existing LangChain agent using the pre-built `vertexai.preview.reasoning_engines.LangchainAgent` template class. Under the hood, this compiles your prompt templates, ChatVertexAI model configs, and Python function tools into a structured LangChain `AgentExecutor`.
 
 We provide a complete sample in `scripts/langchain_agent.py`.
@@ -323,6 +337,8 @@ print(response)
 
 ## 6. Verify the Workshop Scenarios
 
+> **Business Goal**: Programmatically verify agent integration across various transactional use cases. By testing multi-turn flows (listing stock, querying single items, attempting invalid and valid order submissions), we guarantee the agent behaves reliably and adheres to stock availability rules.
+
 Run the automated verification script to execute the five warehouse scenarios sequentially.
 
 To run verification in **Local Emulation** mode (Option A):
@@ -353,6 +369,8 @@ The script automates five stateful interactions with the agent to verify databas
 ---
 
 ## 7. Observability & Agent Management
+
+> **Business Goal**: Enable production monitoring and debugging. By capturing step-by-step trace maps, runtime execution logs, and exporting standardized OpenTelemetry metrics, you can audit agent decisions, monitor latency spikes, and manage resource costs effectively.
 
 To monitor your agent's health, view traces, and inspect execution logs directly:
 
@@ -397,6 +415,8 @@ To monitor your agent's health, view traces, and inspect execution logs directly
 
 ## 8. Connect the Agent to Gemini Enterprise
 
+> **Business Goal**: Final distribution to corporate users. By registering your agent card in the Gemini Enterprise workspace portal, you enable employees to query the warehouse database using natural language directly within their everyday Gemini chat tools.
+
 To expose your custom warehouse manager agent to corporate users in the Gemini Enterprise workspace:
 1. Open the Google Cloud Console and navigate to **Gemini Enterprise**.
 2. Click on the target **App** you want to attach the agent to.
@@ -408,7 +428,39 @@ To expose your custom warehouse manager agent to corporate users in the Gemini E
 
 ---
 
-## 9. Cleanup
+## 9. Interactive Workshop Challenges
+
+> **Business Goal**: Challenge yourself to verify the agent's analytical and reasoning capability by querying it with complex questions. This ensures the agent is not only executing CRUD operations but can also synthesize data and perform calculations when guided by prompts.
+
+Try chatting with your agent using your preferred interface (e.g., `python3 scripts/interact_agent.py` for Option B, or `python3 scripts/interact_adk_agent.py` for Option C), and see if you can solve the following challenges:
+
+### Challenge 1: Inventory Valuation
+* **Question**: What is the total monetary value of all Quantum Compactors currently in stock?
+<details>
+<summary><b>💡 Hint (Sample Prompt)</b></summary>
+
+Ask the agent:
+```
+What is the total value of all Quantum Compactors in stock? (Hint: Multiply its quantity by price)
+```
+</details>
+
+### Challenge 2: Peak Valuation Product
+* **Question**: Which product in the inventory has the highest unit price, and how many are currently in stock?
+<details>
+<summary><b>💡 Hint (Sample Prompt)</b></summary>
+
+Ask the agent:
+```
+Which product has the highest price in the inventory? Tell me its name, price, and current stock level.
+```
+</details>
+
+---
+
+## 10. Cleanup
+
+> **Business Goal**: De-provision and tear down all deployed resources. By running the cleanup script, you delete all Cloud Run services, Cloud SQL instances, Reasoning Engines, and registry configurations created by your username, ensuring zero ongoing cloud billing charges.
 
 To delete all Cloud SQL instances, Cloud Run services, and Agent registry entries created during the workshop:
 ```bash

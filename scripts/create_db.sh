@@ -9,8 +9,10 @@ if [ -z "$GOOGLE_CLOUD_PROJECT" ]; then
   exit 1
 fi
 
-DB_INSTANCE="warehouse-db"
+DB_INSTANCE="${USER}-warehouse-db"
+export DB_INSTANCE
 DB_NAME="warehouse"
+export DB_NAME
 DB_REGION="us-central1"
 DB_PASS="super-secret-password"
 

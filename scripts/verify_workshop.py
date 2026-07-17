@@ -8,6 +8,7 @@ from google import genai
 import google.genai.types as genai_types
 from mcp import ClientSession
 from mcp.client.sse import sse_client
+import getpass
 
 def print_banner(text):
     print("\n" + "=" * 60)
@@ -159,9 +160,12 @@ def run_remote_verification(project, agent_id):
         # Poll for completion
         while True:
             interaction = client.interactions.get(id=interaction.id)
-            if interaction.status in ["SUCCEEDED", "FAILED", "CANCELLED"]:
+            print(f"  [Status: {interaction.status}]", end="\r", flush=True)
+            status_str = str(interaction.status).upper()
+            if status_str in ["SUCCEEDED", "FAILED", "CANCELLED", "COMPLETED", "REQUIRES_ACTION"]:
                 break
             time.sleep(2)
+        print()
         print(f"Agent: {interaction.output_text.strip() if interaction.output_text else ''}")
         print(f"[Interaction ID: {interaction.id}]")
         
@@ -270,8 +274,9 @@ def main():
         print("Error: GOOGLE_CLOUD_PROJECT environment variable is not set.")
         sys.exit(1)
 
+    username = getpass.getuser()
     mcp_url = os.environ.get("MCP_SERVER_URL", "https://warehouse-mcp-server-r2vgs5vdkq-uc.a.run.app/sse")
-    agent_id = "warehouse-manager"
+    agent_id = f"{username}-warehouse-manager"
 
     parser = argparse.ArgumentParser(description="Verify the GEAP Warehouse Management Agent.")
     parser.add_argument("--remote", action="store_true", help="Run verification using the remote cloud managed agent.")

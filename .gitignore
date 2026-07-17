@@ -5,3 +5,5 @@ cloud-sql-proxy
 .env
 .idea/
 .vscode/
+mcp-invoker-key.json
+scratch/

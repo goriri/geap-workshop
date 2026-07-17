@@ -39,16 +39,16 @@ gcloud projects add-iam-policy-binding "$GOOGLE_CLOUD_PROJECT" \
 echo "============================================="
 echo "2. Deploying MCP Server to Cloud Run..."
 echo "============================================="
-gcloud run deploy warehouse-mcp-server \
+gcloud run deploy "${USER}-warehouse-mcp-server" \
     --source mcp_server \
     --region us-central1 \
-    --add-cloudsql-instances "${GOOGLE_CLOUD_PROJECT}:us-central1:warehouse-db" \
-    --set-env-vars "DB_USER=postgres,DB_PASS=super-secret-password,DB_NAME=warehouse,INSTANCE_CONNECTION_NAME=${GOOGLE_CLOUD_PROJECT}:us-central1:warehouse-db" \
+    --add-cloudsql-instances "${GOOGLE_CLOUD_PROJECT}:us-central1:${USER}-warehouse-db" \
+    --set-env-vars "DB_USER=postgres,DB_PASS=super-secret-password,DB_NAME=warehouse,INSTANCE_CONNECTION_NAME=${GOOGLE_CLOUD_PROJECT}:us-central1:${USER}-warehouse-db" \
     --allow-unauthenticated \
     --quiet
 
 # Retrieve and print the URL
-SERVICE_URL=$(gcloud run services describe warehouse-mcp-server --region us-central1 --format="value(status.url)")
+SERVICE_URL=$(gcloud run services describe "${USER}-warehouse-mcp-server" --region us-central1 --format="value(status.url)")
 echo "============================================="
 echo "Deployment complete!"
 echo "Your MCP Server URL: ${SERVICE_URL}"

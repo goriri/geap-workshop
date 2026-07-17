@@ -121,6 +121,8 @@ class WarehouseAgentReasoningEngine:
 def deploy_agent(project_id: str, location: str, mcp_url: str, staging_bucket: str):
     from google.cloud import aiplatform
     from vertexai import agent_engines
+    import getpass
+    username = getpass.getuser()
     
     print(f"Initializing aiplatform (Project: {project_id}, Location: {location})...")
     aiplatform.init(project=project_id, location=location, staging_bucket=staging_bucket)
@@ -140,7 +142,8 @@ def deploy_agent(project_id: str, location: str, mcp_url: str, staging_bucket: s
                 "httpx>=0.20.0",
                 "anyio"
             ],
-            display_name="warehouse-assistant-adk",
+            display_name=f"{username}-warehouse-assistant-adk",
+            gcs_dir_name=f"{username}-reasoning-engine",
             extra_packages=[],
             env_vars={
                 "GOOGLE_CLOUD_AGENT_ENGINE_ENABLE_TELEMETRY": "true",

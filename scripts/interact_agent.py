@@ -24,7 +24,9 @@ def main():
     audience = mcp_url
     sse_url = mcp_url
 
-    agent_id = "warehouse-assistant-public-v3"
+    import getpass
+    username = getpass.getuser()
+    agent_id = f"{username}-warehouse-manager"
     print(f"Initializing Gemini Client (Project: {project}, Location: global)...")
     client = genai.Client(vertexai=True, project=project, location="global", http_options={"timeout": 1200000})
 
@@ -70,7 +72,8 @@ def main():
             while True:
                 interaction = client.interactions.get(id=interaction.id)
                 print(f"[Status: {interaction.status}]", end="\r", flush=True)
-                if interaction.status in ["SUCCEEDED", "FAILED", "CANCELLED", "COMPLETED", "REQUIRES_ACTION"]:
+                status_str = str(interaction.status).upper()
+                if status_str in ["SUCCEEDED", "FAILED", "CANCELLED", "COMPLETED", "REQUIRES_ACTION"]:
                     break
                 time.sleep(1)
             
