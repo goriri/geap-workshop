@@ -4,7 +4,7 @@ import sys
 from google import genai
 import google.genai.types as genai_types
 from mcp import ClientSession
-from mcp.client.sse import sse_client
+from mcp.client.streamable_http import streamablehttp_client
 
 async def main():
     project = os.environ.get("GOOGLE_CLOUD_PROJECT")
@@ -12,8 +12,18 @@ async def main():
         print("Error: GOOGLE_CLOUD_PROJECT environment variable is not set.")
         sys.exit(1)
 
-    mcp_url = os.environ.get("MCP_SERVER_URL", "https://warehouse-mcp-server-r2vgs5vdkq-uc.a.run.app/sse")
-    
+    mcp_url = os.environ.get("MCP_SERVER_URL")
+    if not mcp_url:
+        print("Error: MCP_SERVER_URL environment variable is not set.")
+        sys.exit(1)
+
+    # Normalize URL to the Streamable HTTP endpoint (/mcp)
+    if mcp_url.endswith("/sse"):
+        mcp_url = mcp_url[:-4]
+    if not mcp_url.endswith("/mcp"):
+        mcp_url = f"{mcp_url}/mcp"
+
+
     print(f"Initializing Gemini Client (Project: {project}, Location: global)...")
     client = genai.Client(vertexai=True, project=project, location="global")
 
@@ -25,16 +35,16 @@ async def main():
             from google.auth.transport.requests import Request
             import google.oauth2.id_token
             # Use base URL as audience
-            audience = mcp_url.split("/sse")[0]
+            audience = mcp_url.rsplit("/mcp", 1)[0]
             token = google.oauth2.id_token.fetch_id_token(Request(), audience)
             headers["Authorization"] = f"Bearer {token}"
             print("Successfully retrieved OIDC authentication token.")
         except Exception as e:
             print(f"Warning: Could not fetch OIDC token: {e}")
 
-    print(f"Connecting to MCP SSE server at {mcp_url}...")
+    print(f"Connecting to MCP Streamable HTTP server at {mcp_url}...")
     try:
-        async with sse_client(url=mcp_url, headers=headers) as (read_stream, write_stream):
+        async with streamablehttp_client(url=mcp_url, headers=headers) as (read_stream, write_stream, _):
             async with ClientSession(read_stream, write_stream) as session:
                 await session.initialize()
                 print("MCP session initialized successfully!")

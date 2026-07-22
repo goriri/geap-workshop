@@ -46,6 +46,7 @@ def main():
     print("="*60 + "\n")
 
     environment = "remote"
+    previous_interaction_id = None
 
     while True:
         try:
@@ -63,29 +64,28 @@ def main():
                 agent=agent_name,
                 input=user_input,
                 environment=environment,
+                previous_interaction_id=previous_interaction_id,
                 background=True,
                 timeout=600.0,
             )
             print(f"[Interaction ID: {interaction.id}]")
-            
-            # Poll for completion
+
+            # Poll for completion (API returns lowercase statuses, e.g. "completed")
             while True:
                 interaction = client.interactions.get(id=interaction.id)
-                print(f"[Status: {interaction.status}]", end="\r", flush=True)
-                status_str = str(interaction.status).upper()
-                if status_str in ["SUCCEEDED", "FAILED", "CANCELLED", "COMPLETED", "REQUIRES_ACTION"]:
+                status = (interaction.status or "").lower()
+                print(f"[Status: {status}]   ", end="\r", flush=True)
+                if status in ["succeeded", "failed", "cancelled", "completed", "requires_action"]:
                     break
                 time.sleep(1)
-            
+
             # Print response
-            print(f"\nAgent: {interaction.output_text if hasattr(interaction, 'output_text') else getattr(interaction, 'outputs', 'No output')}")
-            
-            # Update environment to use the session ID for the next turn
-            if hasattr(interaction, 'environment_id') and interaction.environment_id:
+            print(f"\nAgent: {interaction.output_text or '(no output)'}")
+
+            # Reuse the sandbox environment and thread conversation history into the next turn
+            if getattr(interaction, "environment_id", None):
                 environment = interaction.environment_id
-            
-            # Print interaction ID for debugging/observability
-            print(f"[Interaction ID: {interaction.id}]")
+            previous_interaction_id = interaction.id
             
         except KeyboardInterrupt:
             print("\nGoodbye!")

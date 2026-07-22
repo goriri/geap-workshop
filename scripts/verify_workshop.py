@@ -7,7 +7,7 @@ import asyncio
 from google import genai
 import google.genai.types as genai_types
 from mcp import ClientSession
-from mcp.client.sse import sse_client
+from mcp.client.streamable_http import streamablehttp_client
 import getpass
 
 def print_banner(text):
@@ -31,8 +31,14 @@ async def run_local_verification(project, mcp_url):
         except Exception as e:
             print(f"Warning: Could not fetch OIDC token: {e}")
 
-    print(f"Connecting to MCP SSE server at {mcp_url}...")
-    async with sse_client(url=mcp_url, headers=headers) as (read_stream, write_stream):
+    # Normalize URL to the Streamable HTTP endpoint (/mcp)
+    if mcp_url.endswith("/sse"):
+        mcp_url = mcp_url[:-4]
+    if not mcp_url.endswith("/mcp"):
+        mcp_url = f"{mcp_url}/mcp"
+
+    print(f"Connecting to MCP Streamable HTTP server at {mcp_url}...")
+    async with streamablehttp_client(url=mcp_url, headers=headers) as (read_stream, write_stream, _):
         async with ClientSession(read_stream, write_stream) as session:
             await session.initialize()
             
@@ -145,33 +151,39 @@ def run_remote_verification(project, agent_id):
 
     # Use the 'remote' environment alias for the first interaction
     env_id = "remote"
+    prev_interaction_id = None
     print(f"Session environment initialized: {env_id}")
 
     # Helper function to send interaction
     def converse(prompt):
-        nonlocal env_id
+        nonlocal env_id, prev_interaction_id
         print(f"\nUser: {prompt}")
         interaction = client.interactions.create(
             agent=f"projects/{project}/locations/global/agents/{agent_id}",
             environment=env_id,
+            previous_interaction_id=prev_interaction_id,
             input=prompt,
             background=True
         )
-        # Poll for completion
+        # Poll for completion (API returns lowercase statuses, e.g. "completed")
+        start = time.time()
         while True:
             interaction = client.interactions.get(id=interaction.id)
-            print(f"  [Status: {interaction.status}]", end="\r", flush=True)
-            status_str = str(interaction.status).upper()
-            if status_str in ["SUCCEEDED", "FAILED", "CANCELLED", "COMPLETED", "REQUIRES_ACTION"]:
+            status = (interaction.status or "").lower()
+            print(f"[{time.time() - start:.0f}s] Status: {status}   ", end="\r", flush=True)
+            if status in ["succeeded", "failed", "cancelled", "completed", "requires_action"]:
+                print()
                 break
             time.sleep(2)
         print()
         print(f"Agent: {interaction.output_text.strip() if interaction.output_text else ''}")
         print(f"[Interaction ID: {interaction.id}]")
-        
-        # Update env_id for the next turn to maintain state
-        env_id = interaction.environment_id
-        
+
+        # Reuse the sandbox environment and thread conversation history
+        if interaction.environment_id:
+            env_id = interaction.environment_id
+        prev_interaction_id = interaction.id
+
         return interaction.id
 
     # Action 1: List inventory
@@ -275,7 +287,7 @@ def main():
         sys.exit(1)
 
     username = getpass.getuser()
-    mcp_url = os.environ.get("MCP_SERVER_URL", "https://warehouse-mcp-server-r2vgs5vdkq-uc.a.run.app/sse")
+    mcp_url = os.environ.get("MCP_SERVER_URL")
     agent_id = f"{username}-warehouse-manager"
 
     parser = argparse.ArgumentParser(description="Verify the GEAP Warehouse Management Agent.")
@@ -287,12 +299,14 @@ def main():
         # Resolve full resource name if only ID is provided
         engine_name = args.adk
         if not engine_name.startswith("projects/"):
-            # Fetch default locations
-            engine_name = f"projects/181550378089/locations/us-central1/reasoningEngines/{args.adk}"
+            engine_name = f"projects/{project}/locations/us-central1/reasoningEngines/{args.adk}"
         run_adk_verification(project, engine_name)
     elif args.remote:
         run_remote_verification(project, agent_id)
     else:
+        if not mcp_url:
+            print("Error: MCP_SERVER_URL environment variable is not set.")
+            sys.exit(1)
         print("Running in LOCAL agent emulation mode...")
         asyncio.run(run_local_verification(project, mcp_url))
 
