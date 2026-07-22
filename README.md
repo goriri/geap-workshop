@@ -368,46 +368,74 @@ The script automates five stateful interactions with the agent to verify databas
 
 ---
 
-## 7. Observability & Agent Management
+---
 
-> **Business Goal**: Enable production monitoring and debugging. By capturing step-by-step trace maps, runtime execution logs, and exporting standardized OpenTelemetry metrics, you can audit agent decisions, monitor latency spikes, and manage resource costs effectively.
+## 7. Observability, Session & Trajectory Logging
 
-To monitor your agent's health, view traces, and inspect execution logs directly:
+> **Business Goal**: Enable production monitoring, session auditability, and debugging. By recording turn-by-turn session trajectories, capturing step-by-step reasoning maps, inspecting container runtime logs, and exporting OpenTelemetry traces, you can audit agent decisions, monitor latency spikes, and manage resource costs effectively.
 
-### For Cloud-Managed Agents (Option B):
-* **Trace Extraction:** Retrieve the precise reasoning trace and tool execution metadata of the last transaction session:
+### 1. View Sessions & Trajectories via API / CLI
+
+We provide a unified observation script [`scripts/observe_agent.py`](file:///usr/local/google/home/jush/geap-workshop/scripts/observe_agent.py) to inspect session history and execution trajectories for all agent options.
+
+* **Option A (Local Agent Emulation):**
+  Inspect locally saved session trajectories:
   ```bash
-  python3 scripts/observe_agent.py
-  ```
-* **Console Monitoring:** Monitor live health, tool executions, and billing details directly within the Google Cloud Console under the **Gemini Enterprise -> Agent Platform** menu.
+  # View latest local session trajectory
+  python3 scripts/observe_agent.py --local
 
-### For Reasoning Engine / ADK Agents (Option C & D):
-* **Console Location:**
-  1. Navigate to the Google Cloud Console.
-  2. Select your project.
-  3. Search for **Vertex AI** and open the dashboard.
-  4. In the left navigation pane under **Deploy and Use** or **Developer Tools**, click on **Reasoning Engine** (or **Agent Engine**). Deployed instances are listed here.
-* **Logs Inspection (Cloud Logging):**
-  1. Open the **Logs Explorer** in Google Cloud Console.
-  2. Enter the following query to retrieve stderr and stdout logs from your Reasoning Engine container (replace `ENGINE_ID` with your deployed instance ID):
+  # View specific session by ID
+  python3 scripts/observe_agent.py --session_id YOUR_SESSION_ID
+  ```
+
+* **Option C (Reasoning Engine / ADK Agent):**
+  Fetch active session summaries and step-by-step turn trajectories directly via the Reasoning Engine API:
+  ```bash
+  # List sessions and display the latest session trajectory
+  python3 scripts/observe_agent.py --adk YOUR_REASONING_ENGINE_RESOURCE_NAME_OR_ID
+
+  # Query specific session trajectory via API
+  python3 scripts/observe_agent.py --adk YOUR_REASONING_ENGINE_RESOURCE_NAME_OR_ID --session_id YOUR_SESSION_ID
+  ```
+
+* **Option B (Cloud-Managed Agent):**
+  Retrieve the step trace of a specific interaction:
+  ```bash
+  python3 scripts/observe_agent.py --interaction_id YOUR_INTERACTION_ID
+  ```
+
+---
+
+### 2. View Sessions, Trajectories & Traces in Google Cloud Console
+
+You can inspect live session metrics, container logs, and OpenTelemetry trace spans directly within the Google Cloud Console:
+
+* **Vertex AI Reasoning Engine Console:**
+  1. Open [Google Cloud Console](https://console.cloud.google.com/).
+  2. Select your project ID.
+  3. Navigate to **Vertex AI** -> **Reasoning Engine** (or **Agent Engine**).
+  4. Click on your deployed agent instance (e.g. `${USER}-warehouse-assistant-adk`).
+  5. View deployment details, active endpoints, resource utilization, and session metadata.
+
+* **Container Execution Logs (Cloud Logging):**
+  1. Open **Logs Explorer** in Google Cloud Console.
+  2. Enter the following query to retrieve stdout/stderr logs from your Reasoning Engine container (replace `ENGINE_ID` with your deployed instance ID):
      ```query
      resource.type="aiplatform.googleapis.com/ReasoningEngine"
      resource.labels.reasoning_engine_id="ENGINE_ID"
      ```
-  3. Click **Run query** to view execution traces and output logs from python code runs in real time.
+  3. Click **Run query** to inspect real-time tool execution logs, MCP communication steps, and error stack traces.
+
+* **OpenTelemetry Distributed Tracing (Cloud Trace):**
+  Deployed Reasoning Engines automatically publish OpenTelemetry spans when environment variables `GOOGLE_CLOUD_AGENT_ENGINE_ENABLE_TELEMETRY="true"` are configured.
+  1. Open **Cloud Trace** -> **Trace Explorer** in Google Cloud Console.
+  2. Filter by service name `ReasoningEngine` or URI `/query`.
+  3. Click on a trace to inspect latency breakdown for Gemini API model generation vs. Cloud Run MCP tool execution.
+
 * **OpenTelemetry Metrics (Cloud Monitoring):**
-  Deployed Reasoning Engines automatically publish execution telemetry metrics to Cloud Monitoring when environment variables `GOOGLE_CLOUD_AGENT_ENGINE_ENABLE_TELEMETRY="true"` are configured.
-  To inspect these metrics:
-  1. Go to the **Metrics Explorer** page in Google Cloud Console.
-  2. In the metric selection query bar, search for **Gemini Enterprise Agent Platform Reasoning Engine** (associated with resource type `aiplatform.googleapis.com/ReasoningEngine`).
-  3. Select a metric from the options:
-     - **Request count**: Rate of incoming queries.
-     - **Request latencies**: Execution duration histograms.
-     - **Container CPU/Memory allocation**: Resource utilization metrics.
-  4. For advanced analysis, toggle the PromQL query mode and query raw values, e.g.:
-     ```promql
-     sum_over_time(increase(aiplatform_googleapis_com:reasoning_engine_request_count{reasoning_engine_id="ENGINE_ID"}[1h]))
-     ```
+  1. Open **Metrics Explorer** in Google Cloud Console.
+  2. Search for metric domain **Vertex AI Reasoning Engine** (`aiplatform.googleapis.com/ReasoningEngine`).
+  3. Select **Request count**, **Request latencies**, or **Container CPU/Memory allocation**.
 
 
 

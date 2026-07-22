@@ -1,10 +1,22 @@
 import asyncio
 import os
 import sys
+import json
+import time
+import uuid
 from google import genai
 import google.genai.types as genai_types
 from mcp import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
+
+def save_session_trajectory(session_id: str, trajectory: dict):
+    """Saves structured session trajectory log to sessions/{session_id}.json."""
+    sessions_dir = "sessions"
+    os.makedirs(sessions_dir, exist_ok=True)
+    filepath = os.path.join(sessions_dir, f"{session_id}.json")
+    with open(filepath, "w") as f:
+        json.dump(trajectory, f, indent=2)
+    return filepath
 
 async def main():
     project = os.environ.get("GOOGLE_CLOUD_PROJECT")
@@ -23,6 +35,8 @@ async def main():
     if not mcp_url.endswith("/mcp"):
         mcp_url = f"{mcp_url}/mcp"
 
+    # Initialize or accept SESSION_ID
+    session_id = os.environ.get("SESSION_ID") or f"local-session-{int(time.time())}-{uuid.uuid4().hex[:6]}"
 
     print(f"Initializing Gemini Client (Project: {project}, Location: global)...")
     client = genai.Client(vertexai=True, project=project, location="global")
@@ -72,13 +86,22 @@ async def main():
 
                 print("\n" + "="*60)
                 print("Welcome to the Local Warehouse Manager Agent CLI Client!")
+                print(f"Active Session ID: {session_id}")
                 print("="*60)
                 print("This interactive console allows you to chat directly with your agent.")
                 print("Type 'exit' or 'quit' to end the conversation.")
                 print("="*60 + "\n")
 
                 history = []
+                session_trajectory = {
+                    "session_id": session_id,
+                    "agent_type": "local_emulation",
+                    "project_id": project,
+                    "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                    "turns": []
+                }
 
+                turn_count = 0
                 while True:
                     try:
                         user_input = input("\nYou: ")
@@ -87,6 +110,19 @@ async def main():
                         if user_input.strip().lower() in ["exit", "quit"]:
                             print("Goodbye!")
                             break
+
+                        turn_count += 1
+                        turn_record = {
+                            "turn_index": turn_count,
+                            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                            "user_input": user_input,
+                            "steps": [
+                                {
+                                    "step_type": "user_input",
+                                    "content": user_input
+                                }
+                            ]
+                        }
 
                         # Append user input to history
                         history.append(
@@ -108,10 +144,23 @@ async def main():
                                 )
                             )
 
+                            # Log thought if returned
+                            for candidate in (response.candidates or []):
+                                for part in (candidate.content.parts or []):
+                                    if getattr(part, "thought", False) and part.text:
+                                        turn_record["steps"].append({
+                                            "step_type": "thought",
+                                            "content": part.text
+                                        })
+
                             # If model returns a text response, print it and break the function calling loop
                             if response.text:
                                 print(f"\nAgent: {response.text}")
                                 history.append(response.candidates[0].content)
+                                turn_record["steps"].append({
+                                    "step_type": "model_output",
+                                    "content": response.text
+                                })
                                 break
 
                             # If model requests function calls, execute them
@@ -122,6 +171,11 @@ async def main():
                                 response_parts = []
                                 for call in response.function_calls:
                                     print(f"\n[Agent is executing tool '{call.name}' with arguments {call.args} on MCP server...]")
+                                    turn_record["steps"].append({
+                                        "step_type": "function_call",
+                                        "tool_name": call.name,
+                                        "arguments": dict(call.args)
+                                    })
                                     
                                     # Invoke the tool on the MCP server
                                     mcp_result = await session.call_tool(call.name, arguments=dict(call.args))
@@ -131,6 +185,12 @@ async def main():
                                     result_text = "\n".join(content_texts)
                                     print(f"[Tool Output: {result_text}]")
                                     
+                                    turn_record["steps"].append({
+                                        "step_type": "function_response",
+                                        "tool_name": call.name,
+                                        "result": result_text
+                                    })
+
                                     # Create the function response part
                                     response_parts.append(
                                         genai_types.Part.from_function_response(
@@ -149,6 +209,11 @@ async def main():
                             else:
                                 # Fallback if no text and no function calls returned
                                 break
+
+                        # Save updated session trajectory after turn
+                        session_trajectory["turns"].append(turn_record)
+                        log_path = save_session_trajectory(session_id, session_trajectory)
+                        print(f"[Trajectory logged to {log_path}]")
 
                     except KeyboardInterrupt:
                         print("\nGoodbye!")

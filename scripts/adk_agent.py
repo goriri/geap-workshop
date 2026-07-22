@@ -1,32 +1,123 @@
 import asyncio
 import os
 import sys
+import time
+import uuid
+import json
 from google import genai
 import google.genai.types as genai_types
 from mcp import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
 
+def save_session_file(session_id: str, session_data: dict):
+    try:
+        os.makedirs("/tmp/sessions", exist_ok=True)
+        filepath = f"/tmp/sessions/{session_id}.json"
+        # Convert non-serializable objects (like Content) if any to dict or text
+        with open(filepath, "w") as f:
+            json.dump({
+                "session_id": session_data.get("session_id"),
+                "created_at": session_data.get("created_at"),
+                "turns": session_data.get("turns", [])
+            }, f, indent=2)
+    except Exception as e:
+        print(f"Warning: Could not save session to file: {e}")
+
+def load_session_file(session_id: str) -> dict:
+    try:
+        filepath = f"/tmp/sessions/{session_id}.json"
+        if os.path.exists(filepath):
+            with open(filepath, "r") as f:
+                return json.load(f)
+    except Exception:
+        pass
+    return None
+
 class WarehouseAgentReasoningEngine:
-    """Vertex AI Reasoning Engine agent for managing warehouse database via MCP."""
+    """Vertex AI Reasoning Engine agent with Session and Trajectory Logging."""
     
     def __init__(self, mcp_url: str):
         self.mcp_url = mcp_url
+        self.sessions = {}
 
     def set_up(self):
         """Initializes genai clients. Runs on container startup."""
-        # We must initialize the client inside set_up because the client object
-        # cannot be pickled/serialized during deployment.
         project = os.environ.get("GOOGLE_CLOUD_PROJECT")
         self.client = genai.Client(vertexai=True, project=project, location="global")
+        if not hasattr(self, "sessions") or self.sessions is None:
+            self.sessions = {}
 
-    async def _async_query(self, user_input: str) -> str:
-        """Internal helper to execute the agent loop asynchronously."""
-        # Standardize route format
+    def create_session(self, session_id: str = None) -> str:
+        """Creates a new session and returns the session_id."""
+        if not session_id:
+            session_id = f"adk-session-{int(time.time())}-{uuid.uuid4().hex[:6]}"
+        if session_id not in self.sessions:
+            disk_sess = load_session_file(session_id)
+            if disk_sess:
+                self.sessions[session_id] = {
+                    "session_id": disk_sess["session_id"],
+                    "created_at": disk_sess["created_at"],
+                    "history": [],
+                    "turns": disk_sess.get("turns", [])
+                }
+            else:
+                self.sessions[session_id] = {
+                    "session_id": session_id,
+                    "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                    "history": [],
+                    "turns": []
+                }
+        return session_id
+
+    def get_session(self, session_id: str) -> dict:
+        """Retrieves session metadata, conversation history, and trajectory steps."""
+        if session_id not in self.sessions:
+            disk_sess = load_session_file(session_id)
+            if disk_sess:
+                return disk_sess
+            return {"error": f"Session '{session_id}' not found.", "session_id": session_id, "turns": []}
+        sess = self.sessions[session_id]
+        return {
+            "session_id": sess["session_id"],
+            "created_at": sess["created_at"],
+            "total_turns": len(sess["turns"]),
+            "turns": sess["turns"]
+        }
+
+    def list_sessions(self) -> list:
+        """Lists all active session summaries."""
+        return [
+            {
+                "session_id": sid,
+                "created_at": sdata["created_at"],
+                "total_turns": len(sdata["turns"])
+            }
+            for sid, sdata in self.sessions.items()
+        ]
+
+    async def _async_query(self, user_input: str, session_id: str = None) -> dict:
+        """Internal helper to execute the agent reasoning loop and record session trajectory."""
+        session_id = self.create_session(session_id)
+        sess = self.sessions[session_id]
+
         mcp_endpoint = self.mcp_url
         if mcp_endpoint.endswith("/sse"):
             mcp_endpoint = mcp_endpoint[:-4]
         if not mcp_endpoint.endswith("/mcp"):
             mcp_endpoint = f"{mcp_endpoint}/mcp"
+
+        turn_index = len(sess["turns"]) + 1
+        turn_record = {
+            "turn_index": turn_index,
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "user_input": user_input,
+            "steps": [
+                {
+                    "step_type": "user_input",
+                    "content": user_input
+                }
+            ]
+        }
 
         try:
             async with streamablehttp_client(mcp_endpoint) as streams:
@@ -35,10 +126,7 @@ class WarehouseAgentReasoningEngine:
                 async with ClientSession(read_stream, write_stream) as session:
                     await session.initialize()
                     
-                    # 1. Fetch tools dynamically from the MCP server
                     tools_result = await session.list_tools()
-                    
-                    # 2. Map MCP tools to Gemini function declarations
                     func_declarations = []
                     for tool in tools_result.tools:
                         fd = genai_types.FunctionDeclaration(
@@ -52,44 +140,69 @@ class WarehouseAgentReasoningEngine:
                     system_instruction = (
                         "You are a warehouse management assistant. Your task is to help the user manage inventory "
                         "and orders in the warehouse. Use the tools provided by the warehouse-db MCP server to query stock, "
-                        "update stock, and create orders. Always summarize your action results clearly for the user."
+                        "update stock, and create orders. Always summarize your action results clearly for the user. "
+                        "You must NEVER update stock level using update_stock to satisfy an order; reject the order instead. "
+                        "When asked about product stock or details, refer to previous conversation history or call get_product_stock/list_inventory directly."
                     )
 
-                    # Initialize conversation history
-                    history = [
+                    # Append user prompt to session history
+                    sess["history"].append(
                         genai_types.Content(
                             role="user",
                             parts=[genai_types.Part.from_text(text=user_input)]
                         )
-                    ]
+                    )
 
-                    # 3. Model call and tool execution loop (supports multi-turn reasoning)
-                    for _ in range(5):  # Max 5 reasoning steps
+                    final_response_text = ""
+                    for step_idx in range(5):
                         response = self.client.models.generate_content(
                             model="gemini-2.5-flash",
-                            contents=history,
+                            contents=sess["history"],
                             config=genai_types.GenerateContentConfig(
                                 tools=gemini_tools,
                                 system_instruction=system_instruction
                             )
                         )
 
+                        # Capture thoughts if present
+                        for candidate in (response.candidates or []):
+                            for part in (candidate.content.parts or []):
+                                if getattr(part, "thought", False) and part.text:
+                                    turn_record["steps"].append({
+                                        "step_type": "thought",
+                                        "content": part.text
+                                    })
+
                         if response.text:
-                            return response.text
+                            final_response_text = response.text
+                            sess["history"].append(response.candidates[0].content)
+                            turn_record["steps"].append({
+                                "step_type": "model_output",
+                                "content": final_response_text
+                            })
+                            break
 
                         if response.function_calls:
-                            # Append model's function call turn to history
-                            history.append(response.candidates[0].content)
-                            
+                            sess["history"].append(response.candidates[0].content)
                             response_parts = []
+                            
                             for call in response.function_calls:
-                                # Call the tool on the MCP server
-                                mcp_result = await session.call_tool(call.name, arguments=dict(call.args))
+                                turn_record["steps"].append({
+                                    "step_type": "function_call",
+                                    "tool_name": call.name,
+                                    "arguments": dict(call.args)
+                                })
                                 
-                                # Gather response text
+                                mcp_result = await session.call_tool(call.name, arguments=dict(call.args))
                                 content_texts = [item.text for item in mcp_result.content if hasattr(item, "text")]
                                 result_text = "\n".join(content_texts)
                                 
+                                turn_record["steps"].append({
+                                    "step_type": "function_response",
+                                    "tool_name": call.name,
+                                    "result": result_text
+                                })
+
                                 response_parts.append(
                                     genai_types.Part.from_function_response(
                                         name=call.name,
@@ -97,8 +210,7 @@ class WarehouseAgentReasoningEngine:
                                     )
                                 )
                             
-                            # Append function responses back to history as user turn
-                            history.append(
+                            sess["history"].append(
                                 genai_types.Content(
                                     role="user",
                                     parts=response_parts
@@ -107,17 +219,39 @@ class WarehouseAgentReasoningEngine:
                         else:
                             break
                             
-                    return "Error: Agent got stuck in a reasoning loop without returning a text response."
+                    if not final_response_text:
+                        final_response_text = "Error: Agent reached maximum steps without text response."
+
+                    sess["turns"].append(turn_record)
+                    save_session_file(session_id, sess)
+                    return {
+                        "session_id": session_id,
+                        "response": final_response_text,
+                        "trajectory": turn_record["steps"]
+                    }
 
         except Exception as e:
-            return f"Error executing agent query: {str(e)}"
+            err_msg = f"Error executing agent query: {str(e)}"
+            turn_record["steps"].append({"step_type": "error", "content": err_msg})
+            sess["turns"].append(turn_record)
+            save_session_file(session_id, sess)
+            return {
+                "session_id": session_id,
+                "response": err_msg,
+                "trajectory": turn_record["steps"]
+            }
 
-    async def query(self, query: str) -> str:
-        """Main endpoint called by Vertex AI Reasoning Engine query API."""
-        return await self._async_query(query)
+    async def query(self, query: str, session_id: str = None) -> str:
+        """Main query endpoint for Reasoning Engine. Handles query requests or session trajectory retrieval."""
+        if query and query.strip().upper() in ["GET_SESSION", "SHOW_TRAJECTORY", "TRAJECTORY", "GET_TRAJECTORY"]:
+            sess_data = self.get_session(session_id)
+            return json.dumps(sess_data, indent=2)
+        res = await self._async_query(query, session_id=session_id)
+        if isinstance(res, dict):
+            return res.get("response", str(res))
+        return str(res)
 
 
-# Deploy and Local Test Entry Point
 def deploy_agent(project_id: str, location: str, mcp_url: str, staging_bucket: str):
     from google.cloud import aiplatform
     from vertexai import agent_engines
@@ -127,12 +261,10 @@ def deploy_agent(project_id: str, location: str, mcp_url: str, staging_bucket: s
     print(f"Initializing aiplatform (Project: {project_id}, Location: {location})...")
     aiplatform.init(project=project_id, location=location, staging_bucket=staging_bucket)
     
-    # Instantiate class
     agent_instance = WarehouseAgentReasoningEngine(mcp_url=mcp_url)
     
-    print("Deploying Reasoning Engine to Vertex AI...")
+    print("Deploying Reasoning Engine to Vertex AI with Telemetry & Session Logging enabled...")
     try:
-        # Deploy using agent_engines.create
         reasoning_engine = agent_engines.create(
             agent_engine=agent_instance,
             requirements=[
@@ -163,32 +295,33 @@ def deploy_agent(project_id: str, location: str, mcp_url: str, staging_bucket: s
 def main():
     project = os.environ.get("GOOGLE_CLOUD_PROJECT")
     mcp_url = os.environ.get("MCP_SERVER_URL", "https://warehouse-mcp-server-mjog4mq5za-uc.a.run.app")
-    staging_bucket = os.environ.get("STAGING_BUCKET") # Reasoning Engine requires a staging Cloud Storage bucket to upload pickled code
+    staging_bucket = os.environ.get("STAGING_BUCKET")
     
     if len(sys.argv) > 1 and sys.argv[1] == "--deploy":
         if not project:
             print("Error: GOOGLE_CLOUD_PROJECT is required for deployment.")
             sys.exit(1)
         if not staging_bucket:
-            # Check if we can use a default staging bucket name
-            staging_bucket = f"gs://{project}-vertex-staging"
+            staging_bucket = f"gs://staging.{project}.appspot.com"
             print(f"Using default staging bucket: {staging_bucket}")
             
         deploy_agent(project, "us-central1", mcp_url, staging_bucket)
     else:
-        # Run local test
         print("Running local verification of the Reasoning Engine class...")
         if not project:
-            # For local mock run, set a fake project ID if not set
             os.environ["GOOGLE_CLOUD_PROJECT"] = "geap-workshop-temp-1"
             
         agent = WarehouseAgentReasoningEngine(mcp_url=mcp_url)
         agent.set_up()
         
+        session_id = agent.create_session()
+        print(f"Testing session creation: {session_id}")
         test_query = "What products are currently in stock?"
-        print(f"Querying local agent: '{test_query}'...")
-        response = asyncio.run(agent.query(test_query))
-        print(f"\nAgent Response:\n{response}")
+        print(f"Querying local ADK agent: '{test_query}'...")
+        res = asyncio.run(agent._async_query(test_query, session_id=session_id))
+        print(f"\nAgent Response:\n{res['response']}")
+        print(f"\nSession Trajectory Steps ({len(res['trajectory'])} steps):")
+        print(json.dumps(res["trajectory"], indent=2))
 
 if __name__ == "__main__":
     main()

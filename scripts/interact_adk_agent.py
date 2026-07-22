@@ -1,5 +1,8 @@
 import os
 import sys
+import time
+import uuid
+import json
 from google.cloud import aiplatform
 from vertexai.preview import reasoning_engines
 
@@ -7,10 +10,13 @@ def main():
     project = os.environ.get("GOOGLE_CLOUD_PROJECT", "geap-workshop-temp-1")
     location = os.environ.get("GOOGLE_CLOUD_LOCATION", "us-central1")
     
-    # Get resource name from env, or default to our successfully deployed engine
     engine_name = os.environ.get("REASONING_ENGINE_NAME")
     if not engine_name:
-        engine_name = "projects/181550378089/locations/us-central1/reasoningEngines/2476591117693353984"
+        print("Error: REASONING_ENGINE_NAME environment variable is not set.")
+        print("Set REASONING_ENGINE_NAME to your deployed Reasoning Engine resource name.")
+        sys.exit(1)
+
+    session_id = os.environ.get("SESSION_ID") or f"adk-session-{int(time.time())}-{uuid.uuid4().hex[:6]}"
         
     print(f"Initializing Vertex AI SDK (Project: {project}, Location: {location})...")
     aiplatform.init(project=project, location=location)
@@ -24,9 +30,11 @@ def main():
 
     print("\n" + "="*60)
     print("Welcome to the Vertex AI Reasoning Engine ADK Agent CLI Client!")
+    print(f"Active Session ID: {session_id}")
     print("="*60)
     print("This interactive console allows you to chat directly with your remote Python-packaged agent.")
     print("Type 'exit' or 'quit' to end the conversation.")
+    print("Type 'session' or 'trajectory' to view the full session trajectory via API.")
     print("="*60 + "\n")
 
     while True:
@@ -38,11 +46,17 @@ def main():
                 print("Goodbye!")
                 break
 
+            if user_input.strip().lower() in ["session", "trajectory"]:
+                print(f"\nFetching Session Trajectory via API for Session: {session_id}...")
+                try:
+                    sess_data = agent.get_session(session_id=session_id)
+                    print(json.dumps(sess_data, indent=2))
+                except Exception as e:
+                    print(f"Could not fetch session data: {e}")
+                continue
+
             print("\nThinking (Remote Agent executing reasoning loop)...")
-            # Query the remote reasoning engine
-            response = agent.query(query=user_input)
-            
-            # Print response
+            response = agent.query(query=user_input, session_id=session_id)
             print(f"\nAgent: {response}")
             
         except KeyboardInterrupt:
