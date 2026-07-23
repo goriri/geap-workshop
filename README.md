@@ -1,13 +1,13 @@
-# Gemini Enterprise Agent Platform (GEAP) Warehouse Workshop
+# Agent Platform Warehouse Workshop
 
-This workshop demonstrates the capabilities of the **Gemini Enterprise Agent Platform (GEAP)**. It builds a stateful **Warehouse Management Agent** that queries a Cloud SQL database through an MCP (Model Context Protocol) server running on Cloud Run, reasons over customer requests, and performs transactions.
+This workshop demonstrates the capabilities of the **Agent Platform**. It builds a stateful **Warehouse Management Agent** that queries a Cloud SQL database through an MCP (Model Context Protocol) server running on Cloud Run, reasons over customer requests, and performs transactions.
 
 ### Key Capabilities Demoed
 * **Native MCP Server Integration:** Connecting remote Model Context Protocol (MCP) servers securely to a cloud-managed agent.
 * **FastMCP Tool Generation:** Effortlessly generating standardized MCP schemas from simple, type-hinted Python functions.
 * **Stateful Tool Calling:** Demonstrating an agent's ability to reason, invoke tools sequentially, evaluate responses, and take conditional actions (e.g., verifying stock before allowing an order).
 * **Local Emulation:** Rapidly developing and testing agents locally without the overhead of cloud deployment cycles.
-* **Agent Provisioning:** Utilizing Vertex AI Agent Engine to create persistent, cloud-managed agents.
+* **Agent Provisioning:** Utilizing Agent Engine to create persistent, cloud-managed agents.
 
 ---
 
@@ -15,7 +15,7 @@ This workshop demonstrates the capabilities of the **Gemini Enterprise Agent Pla
 
 ```mermaid
 graph TD
-    User([User CLI / Console]) <--> |1. Prompt / Interaction| GEAP[Gemini Enterprise Agent Platform]
+    User([User CLI / Console]) <--> |1. Prompt / Interaction| GEAP[Agent Platform]
     GEAP <--> |2. Tool Call| MCPServer[MCP Server on Cloud Run]
     MCPServer <--> |3. SQL Query / Write| CloudSQL[(Cloud SQL PostgreSQL)]
 ```
@@ -50,7 +50,7 @@ The user account running this workshop requires the following IAM roles on the p
 * **Project IAM Admin** (`roles/resourcemanager.projectIamAdmin`) - to configure Service Account permissions.
 * **Cloud Run Admin** (`roles/run.admin`) - to deploy the MCP server.
 * **Cloud SQL Admin** (`roles/cloudsql.admin`) - to create and manage the PostgreSQL database.
-* **Vertex AI Administrator** (`roles/aiplatform.admin`) - to create and run agents.
+* **Agent Platform Administrator** (`roles/aiplatform.admin`) - to create and run agents.
 * **Service Usage Admin** (`roles/serviceusage.serviceUsageAdmin`) - to enable Google Cloud APIs.
 * **Storage Admin** (`roles/storage.admin`) - to create storage buckets for container builds.
 * **Artifact Registry Administrator** (`roles/artifactregistry.admin`) - to store the built container images.
@@ -182,7 +182,7 @@ pip install -r requirements.txt
 
 ## 4. Warehouse Agent Implementation & Execution
 
-> **Business Goal**: Implement and execute the core agent loop. Option A lets you test changes rapidly via local emulation, Option B deploys a secure, enterprise-grade cloud-hosted agent, and Option C packages the agent logic into a custom sandbox container using the Vertex AI ADK.
+> **Business Goal**: Implement and execute the core agent loop. Option A lets you test changes rapidly via local emulation, Option B deploys a secure, enterprise-grade cloud-hosted agent, and Option C packages the agent logic into a custom sandbox container using the Agent Development Kit (ADK).
 
 Choose **Option A (Local Emulation - Recommended)** or **Option B (Cloud Managed Agent)** depending on your GCP organizational permissions:
 
@@ -224,7 +224,7 @@ python3 scripts/local_agent.py
 ---
 
 ### Option B: Cloud-Managed Agent
-You can also create a permanent cloud-managed agent hosted by Vertex AI Agent Engine. Because your Cloud Run MCP server is protected by Google Cloud IAM (Domain Restricted Sharing), the Agent Platform requires valid credentials to connect to it.
+You can also create a permanent cloud-managed agent hosted by Agent Engine. Because your Cloud Run MCP server is protected by Google Cloud IAM (Domain Restricted Sharing), the Agent Platform requires valid credentials to connect to it.
 
 ```bash
 export MCP_SERVER_URL="YOUR_CLOUD_RUN_SSE_URL"
@@ -233,8 +233,8 @@ python3 scripts/interact_agent.py
 ```
 
 #### What is Executed:
-* **Token Retrieval & Injection:** Dynamically fetches a Google Identity token via `gcloud auth print-identity-token` and injects it into the `headers` field of the `mcp_server` tool definition. This allows Vertex AI Agent Engine to authenticate with the Cloud Run service.
-* **Agent Provisioning:** Initiates a call to the Vertex AI Agent Engine (`client.agents.create`) using the base agent model (`antigravity-preview-05-2026`). It registers your Cloud Run MCP server URL and injected headers as a remote toolset.
+* **Token Retrieval & Injection:** Dynamically fetches a Google Identity token via `gcloud auth print-identity-token` and injects it into the `headers` field of the `mcp_server` tool definition. This allows Agent Engine to authenticate with the Cloud Run service.
+* **Agent Provisioning:** Initiates a call to Agent Engine (`client.agents.create`) using the base agent model (`antigravity-preview-05-2026`). It registers your Cloud Run MCP server URL and injected headers as a remote toolset.
 * **Operation Polling:** It monitors and polls the long-running operation until the agent container is fully ready.
 
 #### Key Lines in Code:
@@ -296,7 +296,7 @@ python3 scripts/interact_adk_agent.py
 
 ## 5. Deploy an Existing LangChain Agent on Agent Platform
 
-> **Business Goal**: Leverage the Vertex AI Agent Platform to deploy and run pre-existing LangChain agent workflows. This allows you to migrate legacy agent logic directly to production-grade managed infrastructure while preserving investments in existing LangChain orchestration code.
+> **Business Goal**: Leverage the Agent Platform to deploy and run pre-existing LangChain agent workflows. This allows you to migrate legacy agent logic directly to production-grade managed infrastructure while preserving investments in existing LangChain orchestration code.
 
 Alternatively, you can deploy an existing LangChain agent using the pre-built `vertexai.preview.reasoning_engines.LangchainAgent` template class. Under the hood, this compiles your prompt templates, ChatVertexAI model configs, and Python function tools into a structured LangChain `AgentExecutor`.
 
