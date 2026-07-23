@@ -66,6 +66,105 @@ class WarehouseAgentReasoningEngine:
             print(f"Warning: OpenTelemetry tracer initialization skipped: {e}")
             self.tracer = None
 
+    def _get_engine_resource_path(self):
+        """Returns the GCP ReasoningEngine resource base URL path if available."""
+        project_id = os.getenv("GOOGLE_CLOUD_PROJECT", "geap-trial-run")
+        location = os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1")
+        engine_id = (
+            os.getenv("GOOGLE_CLOUD_AGENT_ENGINE_ID")
+            or os.getenv("GOOGLE_CLOUD_REASONING_ENGINE_RESOURCE_NAME")
+            or os.getenv("REASONING_ENGINE_RESOURCE_NAME")
+            or getattr(self, "_resource_name", None)
+        )
+        if engine_id:
+            if "/" in str(engine_id):
+                return f"https://{location}-aiplatform.googleapis.com/v1beta1/{engine_id}"
+            return f"https://{location}-aiplatform.googleapis.com/v1beta1/projects/{project_id}/locations/{location}/reasoningEngines/{engine_id}"
+        return None
+
+    def _create_managed_session(self, session_id: str, user_id: str = "workshop-user"):
+        """Registers the session with GCP Managed Agent Engine Sessions REST API."""
+        def _do_create():
+            base_path = self._get_engine_resource_path()
+            if not base_path:
+                return
+            try:
+                import google.auth
+                from google.auth.transport.requests import Request
+                import urllib.request
+                import json
+
+                creds, _ = google.auth.default()
+                creds.refresh(Request())
+                token = creds.token
+                
+                url = f"{base_path}/sessions"
+                payload = {"user_id": user_id}
+                req = urllib.request.Request(
+                    url,
+                    data=json.dumps(payload).encode("utf-8"),
+                    headers={
+                        "Authorization": f"Bearer {token}",
+                        "Content-Type": "application/json"
+                    },
+                    method="POST"
+                )
+                with urllib.request.urlopen(req, timeout=5) as resp:
+                    print(f"Successfully registered session '{session_id}' with Managed Sessions API.")
+            except Exception as e:
+                print(f"Managed Session creation note: {e}")
+
+        try:
+            import threading
+            threading.Thread(target=_do_create, daemon=True).start()
+        except Exception as e:
+            print(f"Thread spawn note: {e}")
+
+    def _append_managed_session_event(self, session_id: str, author: str, content_text: str, invocation_id: str):
+        """Appends turn events to GCP Managed Agent Engine Sessions REST API for Cloud Console UI visibility."""
+        def _do_append():
+            base_path = self._get_engine_resource_path()
+            if not base_path:
+                return
+            try:
+                import google.auth
+                from google.auth.transport.requests import Request
+                import urllib.request
+                import json
+
+                creds, _ = google.auth.default()
+                creds.refresh(Request())
+                token = creds.token
+
+                url = f"{base_path}/sessions/{session_id}:appendEvent"
+                payload = {
+                    "author": author,
+                    "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                    "invocationId": invocation_id,
+                    "content": {
+                        "parts": [{"text": str(content_text)}]
+                    }
+                }
+                req = urllib.request.Request(
+                    url,
+                    data=json.dumps(payload).encode("utf-8"),
+                    headers={
+                        "Authorization": f"Bearer {token}",
+                        "Content-Type": "application/json"
+                    },
+                    method="POST"
+                )
+                with urllib.request.urlopen(req, timeout=5) as resp:
+                    pass
+            except Exception as e:
+                print(f"Managed Session event append note: {e}")
+
+        try:
+            import threading
+            threading.Thread(target=_do_append, daemon=True).start()
+        except Exception as e:
+            print(f"Thread spawn note: {e}")
+
     def create_session(self, session_id: str = None) -> str:
         """Creates a new session and returns the session_id."""
         if not session_id:
@@ -86,6 +185,7 @@ class WarehouseAgentReasoningEngine:
                     "history": [],
                     "turns": []
                 }
+                self._create_managed_session(session_id)
         return session_id
 
     def get_session(self, session_id: str) -> dict:
@@ -261,6 +361,9 @@ class WarehouseAgentReasoningEngine:
 
                     sess["turns"].append(turn_record)
                     save_session_file(session_id, sess)
+                    inv_id = f"turn-{turn_index}"
+                    self._append_managed_session_event(session_id, "user", user_input, inv_id)
+                    self._append_managed_session_event(session_id, "model", final_response_text, inv_id)
                     return {
                         "session_id": session_id,
                         "response": final_response_text,
@@ -349,7 +452,7 @@ def deploy_agent(project_id: str, location: str, mcp_url: str, staging_bucket: s
 
 def main():
     project = os.environ.get("GOOGLE_CLOUD_PROJECT")
-    mcp_url = os.environ.get("MCP_SERVER_URL", "https://warehouse-mcp-server-mjog4mq5za-uc.a.run.app")
+    mcp_url = os.environ.get("MCP_SERVER_URL", "https://jush-warehouse-mcp-server-oqdm7jce4a-uc.a.run.app/sse")
     staging_bucket = os.environ.get("STAGING_BUCKET")
     
     if len(sys.argv) > 1 and sys.argv[1] == "--deploy":

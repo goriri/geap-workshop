@@ -58,6 +58,52 @@ def observe_local_session(session_id: str = None):
     print("\n" + "="*60)
 
 
+def fetch_managed_gcp_session_events(engine_name: str, session_id: str):
+    """Fetches session events directly from GCP Managed Agent Engine Sessions REST API."""
+    import urllib.request
+    import google.auth
+    from google.auth.transport.requests import Request
+
+    try:
+        creds, _ = google.auth.default()
+        creds.refresh(Request())
+        token = creds.token
+
+        if not engine_name.startswith("projects/"):
+            project = os.environ.get("GOOGLE_CLOUD_PROJECT", "geap-trial-run")
+            engine_name = f"projects/{project}/locations/us-central1/reasoningEngines/{engine_name}"
+
+        # If session_id is simple ID, construct full path
+        if not "/sessions/" in session_id:
+            url = f"https://us-central1-aiplatform.googleapis.com/v1beta1/{engine_name}/sessions/{session_id}/events"
+        else:
+            url = f"https://us-central1-aiplatform.googleapis.com/v1beta1/{session_id}/events"
+
+        req = urllib.request.Request(
+            url,
+            headers={"Authorization": f"Bearer {token}"},
+            method="GET"
+        )
+        with urllib.request.urlopen(req) as resp:
+            data = json.loads(resp.read().decode())
+            print("\n" + "="*60)
+            print(f"GCP MANAGED SESSION EVENTS (Session: {session_id})")
+            print("="*60)
+            events = data.get("sessionEvents", [])
+            print(f"Total Session Events Recorded: {len(events)}")
+            for i, evt in enumerate(events):
+                author = evt.get("author", "unknown")
+                timestamp = evt.get("timestamp", "")
+                parts = evt.get("content", {}).get("parts", [])
+                text = " ".join([p.get("text", "") for p in parts if "text" in p])
+                print(f"  [Event {i+1}] [{timestamp}] {author.upper()}: {text}")
+            print("="*60)
+            return True
+    except Exception as e:
+        print(f"Managed Session REST API query note: {e}")
+        return False
+
+
 def observe_adk_session(project: str, engine_name: str, session_id: str = None):
     from google.cloud import aiplatform
     from vertexai.preview import reasoning_engines
@@ -69,11 +115,15 @@ def observe_adk_session(project: str, engine_name: str, session_id: str = None):
     aiplatform.init(project=project)
     agent = reasoning_engines.ReasoningEngine(engine_name)
 
+    if session_id:
+        print(f"\nFetching Managed Session Events via GCP REST API for Session ID: {session_id}...")
+        fetch_managed_gcp_session_events(engine_name, session_id)
+
     if not session_id:
         print("Error: --session_id is required to fetch Reasoning Engine session trajectory.")
         return
 
-    print(f"\nFetching Session Trajectory via API for Session ID: {session_id}...")
+    print(f"\nFetching Session Trajectory via RPC for Session ID: {session_id}...")
     try:
         raw_sess = agent.query(query="GET_SESSION", session_id=session_id)
         sess_data = json.loads(raw_sess) if isinstance(raw_sess, str) else raw_sess

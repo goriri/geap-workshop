@@ -504,12 +504,13 @@ The Agent Development Kit (ADK) tracks multi-turn stateful conversations through
 
 ADK agents automatically emit OpenTelemetry traces ([ADK Observability & Tracing Documentation](https://adk.dev/observability/traces/)) and container execution logs to Google Cloud observability services:
 
-* **Agent Platform Console (Deployments):**
+* **Managed Sessions (Cloud Console Sessions Tab):**
   1. Open [Google Cloud Console](https://console.cloud.google.com/).
   2. Select your project ID.
   3. Navigate to **Agent Platform** -> **Deployments** (or **Agent Engine**).
   4. Click on your deployed agent instance (e.g. `${USER}-warehouse-assistant-adk`).
-  5. View deployment status, URI endpoints, container environment specifications, and resource allocation.
+  5. Click the **Sessions** tab to view active sessions registered with the Managed Session Service (`projects/.../locations/.../reasoningEngines/.../sessions`).
+  6. Select any session ID to inspect recorded user input and model output events.
 
 * **OpenTelemetry Distributed Tracing (Cloud Trace):**
   Deployed Agent Engine instances automatically export OpenTelemetry spans when environment variable `GOOGLE_CLOUD_AGENT_ENGINE_ENABLE_TELEMETRY="true"` is enabled.
