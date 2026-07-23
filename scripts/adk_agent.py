@@ -53,18 +53,22 @@ class WarehouseAgentReasoningEngine:
             or os.getenv("REASONING_ENGINE_RESOURCE_NAME")
             or getattr(self, "_resource_name", "")
         )
+        if engine_resource_name and "locations/" in engine_resource_name:
+            short_resource_id = engine_resource_name[engine_resource_name.find("locations/"):]
+        else:
+            short_resource_id = f"locations/us-central1/reasoningEngines/{engine_resource_name.split('/')[-1]}" if engine_resource_name else ""
+
         try:
             import opentelemetry
             import opentelemetry.trace
-            import opentelemetry.resourcedetector.gcp_resource_detector
             from opentelemetry.sdk.resources import Resource
             from opentelemetry.sdk.trace import TracerProvider
             from opentelemetry.sdk.trace.export import SimpleSpanProcessor
             from opentelemetry.exporter.cloud_trace import CloudTraceSpanExporter
 
             otel_resource = Resource.create({
-                "cloud.resource_id": engine_resource_name,
-                "gcp.vertex.agent.engine_id": engine_resource_name,
+                "cloud.resource_id": short_resource_id,
+                "gcp.vertex.agent.engine_id": short_resource_id,
                 "service.name": "warehouse_adk_agent"
             })
             provider = TracerProvider(resource=otel_resource)
@@ -73,7 +77,7 @@ class WarehouseAgentReasoningEngine:
             opentelemetry.trace.set_tracer_provider(provider)
 
             self.tracer = opentelemetry.trace.get_tracer("warehouse_adk_agent")
-            print(f"Successfully initialized OpenTelemetry GCP Cloud Trace exporter for resource '{engine_resource_name}'.")
+            print(f"Successfully initialized OpenTelemetry GCP Cloud Trace exporter for resource '{short_resource_id}'.")
         except Exception as e:
             print(f"Warning: OpenTelemetry tracer initialization skipped: {e}")
             self.tracer = None
@@ -425,26 +429,48 @@ class WarehouseAgentReasoningEngine:
                 "trajectory": turn_record["steps"]
             }
 
+    def _parse_prompt(self, query=None, input=None, **kwargs) -> str:
+        val = query if query is not None else (input if input is not None else (kwargs.get("message") or kwargs.get("prompt")))
+        if val is None:
+            return ""
+        if isinstance(val, dict):
+            parts = val.get("parts")
+            if parts and isinstance(parts, list):
+                text_parts = [p.get("text", "") for p in parts if isinstance(p, dict) and "text" in p]
+                if text_parts:
+                    return " ".join(text_parts)
+            return val.get("query") or val.get("input") or val.get("text") or str(val)
+        if isinstance(val, list):
+            text_parts = []
+            for item in val:
+                if isinstance(item, dict):
+                    parts = item.get("parts")
+                    if parts and isinstance(parts, list):
+                        text_parts.extend([p.get("text", "") for p in parts if isinstance(p, dict) and "text" in p])
+                    elif "text" in item:
+                        text_parts.append(str(item["text"]))
+                else:
+                    text_parts.append(str(item))
+            if text_parts:
+                return " ".join(text_parts)
+        return str(val)
+
     async def query(self, query: str = None, input: str = None, session_id: str = None, session: str = None, **kwargs) -> str:
         """Main query endpoint for Reasoning Engine / Cloud Console Playground. Handles query requests or session trajectory retrieval."""
-        prompt_text = query or input or kwargs.get("message") or kwargs.get("prompt")
-        if isinstance(prompt_text, dict):
-            prompt_text = prompt_text.get("query") or prompt_text.get("input") or str(prompt_text)
+        prompt_text = self._parse_prompt(query=query, input=input, **kwargs)
         sess_id = session_id or session or kwargs.get("session_name")
 
-        if prompt_text and str(prompt_text).strip().upper() in ["GET_SESSION", "SHOW_TRAJECTORY", "TRAJECTORY", "GET_TRAJECTORY"]:
+        if prompt_text and prompt_text.strip().upper() in ["GET_SESSION", "SHOW_TRAJECTORY", "TRAJECTORY", "GET_TRAJECTORY"]:
             sess_data = self.get_session(sess_id)
             return json.dumps(sess_data, indent=2)
-        res = await self._async_query(str(prompt_text) if prompt_text else "", session_id=sess_id)
+        res = await self._async_query(prompt_text, session_id=sess_id)
         if isinstance(res, dict):
             return res.get("response", str(res))
         return str(res)
 
     async def stream_query(self, query: str = None, input: str = None, session_id: str = None, session: str = None, **kwargs):
         """Streaming query endpoint for Cloud Console Playground compatibility (:streamQuery?alt=sse)."""
-        prompt_text = query or input or kwargs.get("message") or kwargs.get("prompt")
-        if isinstance(prompt_text, dict):
-            prompt_text = prompt_text.get("query") or prompt_text.get("input") or str(prompt_text)
+        prompt_text = self._parse_prompt(query=query, input=input, **kwargs)
         sess_id = session_id or session or kwargs.get("session_name")
 
         res_str = await self.query(query=prompt_text, session_id=sess_id, **kwargs)
