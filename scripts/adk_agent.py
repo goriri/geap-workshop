@@ -13,7 +13,6 @@ def save_session_file(session_id: str, session_data: dict):
     try:
         os.makedirs("/tmp/sessions", exist_ok=True)
         filepath = f"/tmp/sessions/{session_id}.json"
-        # Convert non-serializable objects (like Content) if any to dict or text
         with open(filepath, "w") as f:
             json.dump({
                 "session_id": session_data.get("session_id"),
@@ -34,18 +33,38 @@ def load_session_file(session_id: str) -> dict:
     return None
 
 class WarehouseAgentReasoningEngine:
-    """Vertex AI Reasoning Engine agent with Session and Trajectory Logging."""
+    """Vertex AI Reasoning Engine agent with OpenTelemetry Tracing & Session Logging."""
     
     def __init__(self, mcp_url: str):
         self.mcp_url = mcp_url
         self.sessions = {}
+        self.tracer = None
 
     def set_up(self):
-        """Initializes genai clients. Runs on container startup."""
+        """Initializes genai clients and OpenTelemetry GCP Cloud Trace exporter."""
         project = os.environ.get("GOOGLE_CLOUD_PROJECT")
         self.client = genai.Client(vertexai=True, project=project, location="global")
         if not hasattr(self, "sessions") or self.sessions is None:
             self.sessions = {}
+
+        try:
+            from opentelemetry import trace
+            from opentelemetry.sdk.trace import TracerProvider
+            from opentelemetry.sdk.trace.export import BatchSpanProcessor
+            from opentelemetry.exporter.cloud_trace import CloudTraceSpanExporter
+
+            provider = trace.get_tracer_provider()
+            if not hasattr(provider, "add_span_processor"):
+                provider = TracerProvider()
+                processor = BatchSpanProcessor(CloudTraceSpanExporter(project_id=project))
+                provider.add_span_processor(processor)
+                trace.set_tracer_provider(provider)
+
+            self.tracer = trace.get_tracer("warehouse_adk_agent")
+            print("Successfully initialized OpenTelemetry GCP Cloud Trace exporter.")
+        except Exception as e:
+            print(f"Warning: OpenTelemetry tracer initialization skipped: {e}")
+            self.tracer = None
 
     def create_session(self, session_id: str = None) -> str:
         """Creates a new session and returns the session_id."""
@@ -119,7 +138,7 @@ class WarehouseAgentReasoningEngine:
             ]
         }
 
-        try:
+        async def run_loop():
             async with streamablehttp_client(mcp_endpoint) as streams:
                 read_stream, write_stream = streams[0], streams[1]
                 
@@ -145,7 +164,6 @@ class WarehouseAgentReasoningEngine:
                         "When asked about product stock or details, refer to previous conversation history or call get_product_stock/list_inventory directly."
                     )
 
-                    # Append user prompt to session history
                     sess["history"].append(
                         genai_types.Content(
                             role="user",
@@ -164,7 +182,6 @@ class WarehouseAgentReasoningEngine:
                             )
                         )
 
-                        # Capture thoughts if present
                         for candidate in (response.candidates or []):
                             for part in (candidate.content.parts or []):
                                 if getattr(part, "thought", False) and part.text:
@@ -230,6 +247,15 @@ class WarehouseAgentReasoningEngine:
                         "trajectory": turn_record["steps"]
                     }
 
+        try:
+            if self.tracer:
+                with self.tracer.start_as_current_span("agent_query_turn") as span:
+                    span.set_attribute("session.id", session_id)
+                    span.set_attribute("user.input", user_input)
+                    return await run_loop()
+            else:
+                return await run_loop()
+
         except Exception as e:
             err_msg = f"Error executing agent query: {str(e)}"
             turn_record["steps"].append({"step_type": "error", "content": err_msg})
@@ -263,7 +289,7 @@ def deploy_agent(project_id: str, location: str, mcp_url: str, staging_bucket: s
     
     agent_instance = WarehouseAgentReasoningEngine(mcp_url=mcp_url)
     
-    print("Deploying Reasoning Engine to Vertex AI with Telemetry & Session Logging enabled...")
+    print("Deploying Agent Engine with OpenTelemetry GCP Trace Exporter enabled...")
     try:
         reasoning_engine = agent_engines.create(
             agent_engine=agent_instance,
@@ -272,7 +298,11 @@ def deploy_agent(project_id: str, location: str, mcp_url: str, staging_bucket: s
                 "google-genai",
                 "mcp>=0.1.0",
                 "httpx>=0.20.0",
-                "anyio"
+                "anyio",
+                "opentelemetry-api",
+                "opentelemetry-sdk",
+                "opentelemetry-exporter-gcp-trace",
+                "opentelemetry-instrumentation-google-genai"
             ],
             display_name=f"{username}-warehouse-assistant-adk",
             gcs_dir_name=f"{username}-reasoning-engine",
@@ -281,10 +311,11 @@ def deploy_agent(project_id: str, location: str, mcp_url: str, staging_bucket: s
                 "GOOGLE_CLOUD_AGENT_ENGINE_ENABLE_TELEMETRY": "true",
                 "OTEL_SEMCONV_STABILITY_OPT_IN": "gen_ai_latest_experimental",
                 "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT": "EVENT_ONLY",
+                "OTEL_TRACES_EXPORTER": "google_cloud",
             }
         )
         print("\n====================================================")
-        print("Reasoning Engine Deployed Successfully!")
+        print("Agent Engine Deployed Successfully!")
         print(f"Resource Name: {reasoning_engine.resource_name}")
         print("====================================================")
         return reasoning_engine.resource_name
