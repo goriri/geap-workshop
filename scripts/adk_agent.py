@@ -138,8 +138,28 @@ class WarehouseAgentReasoningEngine:
             ]
         }
 
+        mcp_headers = {}
+        if ".run.app" in mcp_endpoint:
+            try:
+                import google.oauth2.id_token
+                from google.auth.transport.requests import Request
+
+                audience = mcp_endpoint.split("/mcp")[0].split("/sse")[0]
+                token = google.oauth2.id_token.fetch_id_token(Request(), audience)
+                if token:
+                    mcp_headers["Authorization"] = f"Bearer {token}"
+                    try:
+                        import jwt
+                        decoded = jwt.decode(token, options={"verify_signature": False})
+                        print(f"OIDC Token Claims: email={decoded.get('email')}, sub={decoded.get('sub')}, aud={decoded.get('aud')}")
+                    except Exception:
+                        print(f"Token length: {len(token)}")
+                    print(f"Successfully fetched OIDC ID token for audience '{audience}'")
+            except Exception as e:
+                print(f"Warning: Could not fetch OIDC ID token: {e}")
+
         async def run_loop():
-            async with streamablehttp_client(mcp_endpoint) as streams:
+            async with streamablehttp_client(mcp_endpoint, headers=mcp_headers) as streams:
                 read_stream, write_stream = streams[0], streams[1]
                 
                 async with ClientSession(read_stream, write_stream) as session:
@@ -279,12 +299,14 @@ class WarehouseAgentReasoningEngine:
 
 
 def deploy_agent(project_id: str, location: str, mcp_url: str, staging_bucket: str):
+    import vertexai
     from google.cloud import aiplatform
     from vertexai import agent_engines
     import getpass
     username = getpass.getuser()
     
-    print(f"Initializing aiplatform (Project: {project_id}, Location: {location})...")
+    print(f"Initializing vertexai & aiplatform (Project: {project_id}, Location: {location}, Staging Bucket: {staging_bucket})...")
+    vertexai.init(project=project_id, location=location, staging_bucket=staging_bucket)
     aiplatform.init(project=project_id, location=location, staging_bucket=staging_bucket)
     
     agent_instance = WarehouseAgentReasoningEngine(mcp_url=mcp_url)
@@ -299,9 +321,11 @@ def deploy_agent(project_id: str, location: str, mcp_url: str, staging_bucket: s
                 "mcp>=0.1.0",
                 "httpx>=0.20.0",
                 "anyio",
+                "pyjwt",
                 "opentelemetry-api",
                 "opentelemetry-sdk",
                 "opentelemetry-exporter-gcp-trace",
+                "opentelemetry-resourcedetector-gcp",
                 "opentelemetry-instrumentation-google-genai"
             ],
             display_name=f"{username}-warehouse-assistant-adk",
@@ -333,7 +357,7 @@ def main():
             print("Error: GOOGLE_CLOUD_PROJECT is required for deployment.")
             sys.exit(1)
         if not staging_bucket:
-            staging_bucket = f"gs://staging.{project}.appspot.com"
+            staging_bucket = f"gs://{project}-staging"
             print(f"Using default staging bucket: {staging_bucket}")
             
         deploy_agent(project, "us-central1", mcp_url, staging_bucket)

@@ -366,6 +366,60 @@ The script automates five stateful interactions with the agent to verify databas
 4. **Valid order**: Orders 5 Antigravity Boots for customer "Verification Test", which decrements the database inventory level.
 5. **Re-check stock**: Confirms the database inventory level was updated to 0.
 
+<details>
+<summary><b>📋 Sample Automated Verification Output (Click to expand)</b></summary>
+
+```text
+============================================================
+ RUNNING WAREHOUSE AGENT VERIFICATION
+============================================================
+
+============================================================
+ 1. LISTING INITIAL INVENTORY
+============================================================
+User: List all items in the warehouse inventory.
+Agent: Warehouse Inventory:
+- ID: 1 | Quantum Compactor | Qty: 15 | Price: $1200.00
+  Description: Industrial grade spatial compression unit for storage optimization.
+- ID: 2 | Neural Interface Collar | Qty: 42 | Price: $350.00
+  Description: Direct cybernetic link collar for instant warehouse worker communication.
+- ID: 3 | Antigravity Boots | Qty: 5 | Price: $899.99
+  Description: Personal gravity dampening boots allowing easy vertical reach in tall stacks.
+- ID: 4 | Plasma Cutter 3000 | Qty: 8 | Price: $450.00
+  Description: High-precision laser cutter for heavy crate opening.
+- ID: 5 | Sub-Space Teleporter | Qty: 2 | Price: $4999.00
+  Description: Short-range instant item transport pad for ultra-fast picking.
+
+============================================================
+ 2. QUERYING STOCK OF PRODUCT ID 3
+============================================================
+User: Check the current stock level of Antigravity Boots (Product ID 3).
+Agent: Product: Antigravity Boots (ID: 3) | Current Stock: 5 units | Price: $899.99
+
+============================================================
+ 3. ATTEMPTING INVALID ORDER (EXCESSIVE STOCK)
+============================================================
+User: Place an order for 1000 Antigravity Boots for customer 'Verification Test'.
+Agent: Insufficient stock for product 'Antigravity Boots' (ID: 3). Requested: 1000, Available: 5.
+
+============================================================
+ 4. PLACING VALID ORDER (5 UNITS)
+============================================================
+User: Place an order for 5 Antigravity Boots (Product ID 3) for customer 'Verification Test'.
+Agent: Order successfully created for 'Verification Test'! Ordered 5 units of 'Antigravity Boots' (ID: 3). New stock level: 0 units.
+
+============================================================
+ 5. VERIFYING STOCK DECREASED
+============================================================
+User: Check the stock level of Antigravity Boots (Product ID 3) again to make sure it went down.
+Agent: Product: Antigravity Boots (ID: 3) | Current Stock: 0 units | Price: $899.99
+
+============================================================
+ VERIFICATION FLOW COMPLETED SUCCESSFULLY!
+============================================================
+```
+</details>
+
 ---
 
 ---
@@ -403,6 +457,43 @@ The Agent Development Kit (ADK) tracks multi-turn stateful conversations through
   ```bash
   python3 scripts/observe_agent.py --interaction_id YOUR_INTERACTION_ID
   ```
+
+<details>
+<summary><b>🔍 Sample Trajectory JSON Output (Click to expand)</b></summary>
+
+```json
+{
+  "session_id": "adk-verify-1784778196-b8def6",
+  "created_at": "2026-07-23T03:43:19Z",
+  "turns": [
+    {
+      "turn_index": 1,
+      "timestamp": "2026-07-23T03:43:19Z",
+      "user_input": "List all items in the warehouse inventory.",
+      "steps": [
+        {
+          "step_type": "user_input",
+          "content": "List all items in the warehouse inventory."
+        },
+        {
+          "step_type": "tool_call",
+          "tool_name": "list_inventory",
+          "tool_args": {}
+        },
+        {
+          "step_type": "tool_response",
+          "content": "Warehouse Inventory:\n- ID: 1 | Quantum Compactor | Qty: 15 | Price: $1200.00..."
+        },
+        {
+          "step_type": "model_response",
+          "content": "Here are the current warehouse items..."
+        }
+      ]
+    }
+  ]
+}
+```
+</details>
 
 ---
 
