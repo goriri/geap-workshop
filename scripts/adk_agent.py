@@ -48,6 +48,10 @@ class WarehouseAgentReasoningEngine:
             self.sessions = {}
 
         try:
+            try:
+                import opentelemetry.resourcedetector.gcp_resource_detector
+            except Exception:
+                pass
             from opentelemetry import trace
             from opentelemetry.sdk.trace import TracerProvider
             from opentelemetry.sdk.trace.export import BatchSpanProcessor
@@ -373,6 +377,9 @@ class WarehouseAgentReasoningEngine:
         try:
             if self.tracer:
                 with self.tracer.start_as_current_span("agent_query_turn") as span:
+                    span.set_attribute("gen_ai.conversation.id", session_id)
+                    span.set_attribute("gcp.vertex.agent.session_id", session_id)
+                    span.set_attribute("gcp.vertex.agent.invocation_id", inv_id)
                     span.set_attribute("session.id", session_id)
                     span.set_attribute("user.input", user_input)
                     return await run_loop()
