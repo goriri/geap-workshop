@@ -67,6 +67,7 @@ gcloud services enable \
     artifactregistry.googleapis.com \
     aiplatform.googleapis.com \
     agentregistry.googleapis.com \
+    apphub.googleapis.com \
     cloudbuild.googleapis.com \
     serviceusage.googleapis.com
 ```
