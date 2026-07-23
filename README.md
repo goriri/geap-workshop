@@ -260,10 +260,10 @@ python3 scripts/interact_agent.py
 
 ---
 
-### Option C: Vertex AI Reasoning Engine (ADK Python Agent)
-Alternatively, you can package the agent inside a custom Python class and deploy it using the **Vertex AI Reasoning Engine (ADK)**. 
+### Option C: Agent Engine (ADK Python Custom Agent)
+Alternatively, you can package the agent inside a custom Python class and deploy it using the **Agent Platform Agent Engine (ADK)**. 
 
-Because Reasoning Engine uploads the pickled python code and installs custom requirements in a pre-built container in the cloud, it is a robust alternative when you need direct control over the execution loop and dependency configuration. It is also more resilient during platform-level Tenant Project Pool outages.
+Because Agent Engine uploads the pickled python code and installs custom requirements in a pre-built container in the cloud, it is a robust alternative when you need direct control over the execution loop and dependency configuration. It is also more resilient during platform-level Tenant Project Pool outages.
 
 #### 1. How to Test the ADK Agent Locally:
 You can verify the agent class structure entirely locally (which mocks the remote container execution path):
@@ -273,8 +273,8 @@ export GOOGLE_CLOUD_PROJECT="YOUR_PROJECT_ID"
 python3 scripts/adk_agent.py
 ```
 
-#### 2. How to Deploy the ADK Agent to Vertex AI:
-To deploy the Python class as a remote Reasoning Engine:
+#### 2. How to Deploy the ADK Agent to Agent Platform:
+To deploy the Python class as a remote Agent Engine instance:
 ```bash
 source venv/bin/activate
 export GOOGLE_CLOUD_PROJECT="YOUR_PROJECT_ID"
@@ -310,8 +310,8 @@ export GOOGLE_CLOUD_PROJECT="YOUR_PROJECT_ID"
 python3 scripts/langchain_agent.py
 ```
 
-### 2. How to Deploy the LangChain Agent to Vertex AI:
-Deploy the compiled LangChain graph to the cloud under Reasoning Engine:
+### 2. How to Deploy the LangChain Agent to Agent Platform:
+Deploy the compiled LangChain graph to the cloud under Agent Engine:
 ```bash
 source venv/bin/activate
 export GOOGLE_CLOUD_PROJECT="YOUR_PROJECT_ID"
@@ -388,14 +388,14 @@ We provide a unified observation script [`scripts/observe_agent.py`](file:///usr
   python3 scripts/observe_agent.py --session_id YOUR_SESSION_ID
   ```
 
-* **Option C (Reasoning Engine / ADK Agent):**
-  Fetch active session summaries and step-by-step turn trajectories directly via the Reasoning Engine API:
+* **Option C (Agent Engine / ADK Agent):**
+  Fetch active session summaries and step-by-step turn trajectories directly via the Agent Engine API:
   ```bash
-  # List sessions and display the latest session trajectory
-  python3 scripts/observe_agent.py --adk YOUR_REASONING_ENGINE_RESOURCE_NAME_OR_ID
+  # Display latest session trajectory via API
+  python3 scripts/observe_agent.py --adk YOUR_AGENT_ENGINE_RESOURCE_NAME_OR_ID
 
   # Query specific session trajectory via API
-  python3 scripts/observe_agent.py --adk YOUR_REASONING_ENGINE_RESOURCE_NAME_OR_ID --session_id YOUR_SESSION_ID
+  python3 scripts/observe_agent.py --adk YOUR_AGENT_ENGINE_RESOURCE_NAME_OR_ID --session_id YOUR_SESSION_ID
   ```
 
 * **Option B (Cloud-Managed Agent):**
@@ -406,20 +406,26 @@ We provide a unified observation script [`scripts/observe_agent.py`](file:///usr
 
 ---
 
-### 2. View Sessions, Trajectories & Traces in Google Cloud Console
+### 2. View Deployments, Trajectories & Traces in Google Cloud Console
 
-You can inspect live session metrics, container logs, and OpenTelemetry trace spans directly within the Google Cloud Console:
+You can inspect live deployment details, container logs, and OpenTelemetry trace spans directly within the Google Cloud Console:
 
-* **Vertex AI Reasoning Engine Console:**
+* **Agent Platform Console (Deployments):**
   1. Open [Google Cloud Console](https://console.cloud.google.com/).
   2. Select your project ID.
-  3. Navigate to **Vertex AI** -> **Reasoning Engine** (or **Agent Engine**).
+  3. Navigate to **Agent Platform** -> **Deployments** (or **Agent Engine**).
   4. Click on your deployed agent instance (e.g. `${USER}-warehouse-assistant-adk`).
-  5. View deployment details, active endpoints, resource utilization, and session metadata.
+  5. View deployment status, URI endpoints, container specifications, and resource utilization.
+
+> [!NOTE]
+> **Understanding Console Playground & Sessions for ADK / Agent Engine Deployments**
+> When you deploy a custom Python agent (Option C: ADK / Agent Engine), the deployment runs as a custom code execution container (`resource.type="aiplatform.googleapis.com/ReasoningEngine"`). 
+> - **Playground & Console Sessions UI**: The Console UI Playground and Sessions/Memories tabs are natively designed for **Cloud-Managed Agents** (Option B) that use the Agent Platform Managed Runtime and Session Service.
+> - **How to inspect ADK Agent Sessions**: For ADK / Agent Engine custom container deployments (Option C), session trajectories and turns are tracked via the Agent Engine API (`scripts/observe_agent.py --adk ...`) or interactively (`scripts/interact_adk_agent.py`), while container logs and traces are retrieved via **Cloud Logging** and **Cloud Trace** as detailed below.
 
 * **Container Execution Logs (Cloud Logging):**
   1. Open **Logs Explorer** in Google Cloud Console.
-  2. Enter the following query to retrieve stdout/stderr logs from your Reasoning Engine container (replace `ENGINE_ID` with your deployed instance ID):
+  2. Enter the following query to retrieve stdout/stderr logs from your Agent Engine container (replace `ENGINE_ID` with your deployed instance ID):
      ```query
      resource.type="aiplatform.googleapis.com/ReasoningEngine"
      resource.labels.reasoning_engine_id="ENGINE_ID"
@@ -427,36 +433,19 @@ You can inspect live session metrics, container logs, and OpenTelemetry trace sp
   3. Click **Run query** to inspect real-time tool execution logs, MCP communication steps, and error stack traces.
 
 * **OpenTelemetry Distributed Tracing (Cloud Trace):**
-  Deployed Reasoning Engines automatically publish OpenTelemetry spans when environment variables `GOOGLE_CLOUD_AGENT_ENGINE_ENABLE_TELEMETRY="true"` are configured.
+  Deployed Agent Engines automatically publish OpenTelemetry spans when environment variable `GOOGLE_CLOUD_AGENT_ENGINE_ENABLE_TELEMETRY="true"` is set.
   1. Open **Cloud Trace** -> **Trace Explorer** in Google Cloud Console.
   2. Filter by service name `ReasoningEngine` or URI `/query`.
   3. Click on a trace to inspect latency breakdown for Gemini API model generation vs. Cloud Run MCP tool execution.
 
 * **OpenTelemetry Metrics (Cloud Monitoring):**
   1. Open **Metrics Explorer** in Google Cloud Console.
-  2. Search for metric domain **Vertex AI Reasoning Engine** (`aiplatform.googleapis.com/ReasoningEngine`).
+  2. Search for metric domain **Agent Engine / Reasoning Engine** (`aiplatform.googleapis.com/ReasoningEngine`).
   3. Select **Request count**, **Request latencies**, or **Container CPU/Memory allocation**.
 
-
-
 ---
 
-## 8. Connect the Agent to Gemini Enterprise
-
-> **Business Goal**: Final distribution to corporate users. By registering your agent card in the Gemini Enterprise workspace portal, you enable employees to query the warehouse database using natural language directly within their everyday Gemini chat tools.
-
-To expose your custom warehouse manager agent to corporate users in the Gemini Enterprise workspace:
-1. Open the Google Cloud Console and navigate to **Gemini Enterprise**.
-2. Click on the target **App** you want to attach the agent to.
-3. Select **Agents** in the left navigation sidebar.
-4. Click **Add agent** and choose the **A2A (Agent-to-Agent)** card.
-5. Paste the Agent Card JSON, replacing the `LOCATION` and `RESOURCE_NAME` parameters with your agent's deployment details.
-6. Provide OAUTH authorization credentials in the form, and click **Finish**.
-7. Users can now query your warehouse DB by writing natural language queries in Gemini!
-
----
-
-## 9. Interactive Workshop Challenges
+## 8. Interactive Workshop Challenges
 
 > **Business Goal**: Challenge yourself to verify the agent's analytical and reasoning capability by querying it with complex questions. This ensures the agent is not only executing CRUD operations but can also synthesize data and perform calculations when guided by prompts.
 
@@ -486,9 +475,9 @@ Which product has the highest price in the inventory? Tell me its name, price, a
 
 ---
 
-## 10. Cleanup
+## 9. Cleanup
 
-> **Business Goal**: De-provision and tear down all deployed resources. By running the cleanup script, you delete all Cloud Run services, Cloud SQL instances, Reasoning Engines, and registry configurations created by your username, ensuring zero ongoing cloud billing charges.
+> **Business Goal**: De-provision and tear down all deployed resources. By running the cleanup script, you delete all Cloud Run services, Cloud SQL instances, Agent Engines, and registry configurations created by your username, ensuring zero ongoing cloud billing charges.
 
 To delete all Cloud SQL instances, Cloud Run services, and Agent registry entries created during the workshop:
 ```bash
