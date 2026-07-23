@@ -51,6 +51,7 @@ The user account running this workshop requires the following IAM roles on the p
 * **Cloud Run Admin** (`roles/run.admin`) - to deploy the MCP server.
 * **Cloud SQL Admin** (`roles/cloudsql.admin`) - to create and manage the PostgreSQL database.
 * **Agent Platform Administrator** (`roles/aiplatform.admin`) - to create and run agents.
+* **Cloud Trace Agent** (`roles/cloudtrace.agent`) - to export OpenTelemetry trace data to Cloud Trace.
 * **Service Usage Admin** (`roles/serviceusage.serviceUsageAdmin`) - to enable Google Cloud APIs.
 * **Storage Admin** (`roles/storage.admin`) - to create storage buckets for container builds.
 * **Artifact Registry Administrator** (`roles/artifactregistry.admin`) - to store the built container images.
@@ -69,6 +70,7 @@ gcloud services enable \
     agentregistry.googleapis.com \
     apphub.googleapis.com \
     cloudbuild.googleapis.com \
+    cloudtrace.googleapis.com \
     serviceusage.googleapis.com
 ```
 
