@@ -73,7 +73,7 @@ gcloud services enable \
 
 ---
 
-## 1. Setup Virtual Environment & Install Dependencies
+## 1. Virtual Environment & Dependency Setup
 
 > **Business Goal**: Establish a clean, isolated Python runtime environment to ensure consistent package dependencies, preventing conflicts between workshop libraries and existing system-level packages.
 
@@ -86,7 +86,7 @@ pip install -r requirements.txt
 
 ---
 
-## 2. Step 1: Create Cloud SQL DB & Seed Data
+## 2. Create Cloud SQL Database & Seed Inventory
 
 > **Business Goal**: Establish a secure, managed Cloud SQL database to act as our system of record, holding product inventories and customer orders. Prefixing the resources with your username ensures isolation so multiple users can run the workshop simultaneously in the same Google Cloud project.
 
@@ -138,7 +138,7 @@ pip install -r requirements.txt
 
 ---
 
-## 3. Step 2: Deploy & Expose the MCP Server on Cloud Run
+## 3. Deploy & Expose FastMCP Server on Cloud Run
 
 > **Business Goal**: Package the database access logic into a standardized, web-accessible Model Context Protocol (MCP) server running on Cloud Run, and enroll the tools (such as `list_inventory` and `create_order`) into the Google Agent Registry. This establishes a secure interface enabling LLM agents to safely interact with database records.
 
@@ -180,7 +180,7 @@ pip install -r requirements.txt
 
 ---
 
-## 4. Step 3: Run the Warehouse Agent
+## 4. Warehouse Agent Implementation & Execution
 
 > **Business Goal**: Implement and execute the core agent loop. Option A lets you test changes rapidly via local emulation, Option B deploys a secure, enterprise-grade cloud-hosted agent, and Option C packages the agent logic into a custom sandbox container using the Vertex AI ADK.
 
@@ -335,7 +335,7 @@ print(response)
 
 ---
 
-## 6. Verify the Workshop Scenarios
+## 6. End-to-End Automated Workshop Verification
 
 > **Business Goal**: Programmatically verify agent integration across various transactional use cases. By testing multi-turn flows (listing stock, querying single items, attempting invalid and valid order submissions), we guarantee the agent behaves reliably and adheres to stock availability rules.
 
@@ -370,16 +370,16 @@ The script automates five stateful interactions with the agent to verify databas
 
 ---
 
-## 7. Observability, Session & Trajectory Logging
+## 7. Agent Observability, Traces & Session Management
 
-> **Business Goal**: Enable production monitoring, session auditability, and debugging. By recording turn-by-turn session trajectories, capturing step-by-step reasoning maps, inspecting container runtime logs, and exporting OpenTelemetry traces, you can audit agent decisions, monitor latency spikes, and manage resource costs effectively.
+> **Business Goal**: Enable production monitoring, session auditability, and distributed tracing. By recording turn-by-turn session trajectories, capturing step-by-step reasoning maps, inspecting container runtime logs, and exporting OpenTelemetry traces, you can audit agent decisions, monitor latency spikes, and manage resource costs effectively.
 
 ### 1. View Sessions & Trajectories via API / CLI
 
-We provide a unified observation script [`scripts/observe_agent.py`](file:///usr/local/google/home/jush/geap-workshop/scripts/observe_agent.py) to inspect session history and execution trajectories for all agent options.
+The Agent Development Kit (ADK) tracks multi-turn stateful conversations through session objects ([ADK Sessions Documentation](https://adk.dev/sessions/session/)). We provide a unified observation script [`scripts/observe_agent.py`](file:///usr/local/google/home/jush/geap-workshop/scripts/observe_agent.py) to inspect session state and turn trajectories across all agent modes.
 
 * **Option A (Local Agent Emulation):**
-  Inspect locally saved session trajectories:
+  Inspect locally recorded session trajectories:
   ```bash
   # View latest local session trajectory
   python3 scripts/observe_agent.py --local
@@ -406,42 +406,36 @@ We provide a unified observation script [`scripts/observe_agent.py`](file:///usr
 
 ---
 
-### 2. View Deployments, Trajectories & Traces in Google Cloud Console
+### 2. View Deployments, Traces & Logs in Google Cloud Console
 
-You can inspect live deployment details, container logs, and OpenTelemetry trace spans directly within the Google Cloud Console:
+ADK agents automatically emit OpenTelemetry traces ([ADK Observability & Tracing Documentation](https://adk.dev/observability/traces/)) and container execution logs to Google Cloud observability services:
 
 * **Agent Platform Console (Deployments):**
   1. Open [Google Cloud Console](https://console.cloud.google.com/).
   2. Select your project ID.
   3. Navigate to **Agent Platform** -> **Deployments** (or **Agent Engine**).
   4. Click on your deployed agent instance (e.g. `${USER}-warehouse-assistant-adk`).
-  5. View deployment status, URI endpoints, container specifications, and resource utilization.
+  5. View deployment status, URI endpoints, container environment specifications, and resource allocation.
 
-> [!NOTE]
-> **Understanding Console Playground & Sessions for ADK / Agent Engine Deployments**
-> When you deploy a custom Python agent (Option C: ADK / Agent Engine), the deployment runs as a custom code execution container (`resource.type="aiplatform.googleapis.com/ReasoningEngine"`). 
-> - **Playground & Console Sessions UI**: The Console UI Playground and Sessions/Memories tabs are natively designed for **Cloud-Managed Agents** (Option B) that use the Agent Platform Managed Runtime and Session Service.
-> - **How to inspect ADK Agent Sessions**: For ADK / Agent Engine custom container deployments (Option C), session trajectories and turns are tracked via the Agent Engine API (`scripts/observe_agent.py --adk ...`) or interactively (`scripts/interact_adk_agent.py`), while container logs and traces are retrieved via **Cloud Logging** and **Cloud Trace** as detailed below.
+* **OpenTelemetry Distributed Tracing (Cloud Trace):**
+  Deployed Agent Engine instances automatically export OpenTelemetry spans when environment variable `GOOGLE_CLOUD_AGENT_ENGINE_ENABLE_TELEMETRY="true"` is enabled.
+  1. Open **Cloud Trace** -> **Trace Explorer** in Google Cloud Console.
+  2. Filter by service name `ReasoningEngine` or URI `/query`.
+  3. Inspect trace timelines showing latency breakdown across Gemini model inference and Cloud Run MCP tool calls.
 
 * **Container Execution Logs (Cloud Logging):**
   1. Open **Logs Explorer** in Google Cloud Console.
-  2. Enter the following query to retrieve stdout/stderr logs from your Agent Engine container (replace `ENGINE_ID` with your deployed instance ID):
+  2. Enter the following query to retrieve stdout/stderr container logs (replace `ENGINE_ID` with your deployed instance ID):
      ```query
      resource.type="aiplatform.googleapis.com/ReasoningEngine"
      resource.labels.reasoning_engine_id="ENGINE_ID"
      ```
-  3. Click **Run query** to inspect real-time tool execution logs, MCP communication steps, and error stack traces.
-
-* **OpenTelemetry Distributed Tracing (Cloud Trace):**
-  Deployed Agent Engines automatically publish OpenTelemetry spans when environment variable `GOOGLE_CLOUD_AGENT_ENGINE_ENABLE_TELEMETRY="true"` is set.
-  1. Open **Cloud Trace** -> **Trace Explorer** in Google Cloud Console.
-  2. Filter by service name `ReasoningEngine` or URI `/query`.
-  3. Click on a trace to inspect latency breakdown for Gemini API model generation vs. Cloud Run MCP tool execution.
+  3. Click **Run query** to inspect tool execution logs, MCP request/response payloads, and runtime stack traces.
 
 * **OpenTelemetry Metrics (Cloud Monitoring):**
   1. Open **Metrics Explorer** in Google Cloud Console.
   2. Search for metric domain **Agent Engine / Reasoning Engine** (`aiplatform.googleapis.com/ReasoningEngine`).
-  3. Select **Request count**, **Request latencies**, or **Container CPU/Memory allocation**.
+  3. Select metrics such as **Request count**, **Request latencies**, or **Container CPU/Memory allocation**.
 
 ---
 
