@@ -273,6 +273,7 @@ You can verify the agent class structure entirely locally (which mocks the remot
 ```bash
 source venv/bin/activate
 export GOOGLE_CLOUD_PROJECT="YOUR_PROJECT_ID"
+export MCP_SERVER_URL="https://YOUR_CLOUD_RUN_SERVICE-uc.a.run.app/sse" # The Server-Sent Events endpoint
 python3 scripts/adk_agent.py
 ```
 
@@ -282,6 +283,7 @@ To deploy the Python class as a remote Agent Engine instance:
 source venv/bin/activate
 export GOOGLE_CLOUD_PROJECT="YOUR_PROJECT_ID"
 export STAGING_BUCKET="gs://staging.YOUR_PROJECT_ID.appspot.com" # Staging bucket to upload pickle files
+export MCP_SERVER_URL="https://YOUR_CLOUD_RUN_SERVICE-uc.a.run.app/sse" # The Server-Sent Events endpoint
 python3 scripts/adk_agent.py --deploy
 ```
 This will print the successfully deployed resource name (e.g. `projects/YOUR_PROJECT_NUMBER/locations/us-central1/reasoningEngines/YOUR_ENGINE_ID`).

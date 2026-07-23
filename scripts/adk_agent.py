@@ -42,11 +42,7 @@ class WarehouseAgentReasoningEngine:
 
     def set_up(self):
         """Initializes genai clients and OpenTelemetry GCP Cloud Trace exporter."""
-        project = os.environ.get("GOOGLE_CLOUD_PROJECT")
-        self.client = genai.Client(vertexai=True, project=project, location="global")
-        if not hasattr(self, "sessions") or self.sessions is None:
-            self.sessions = {}
-
+        project = os.environ.get("GOOGLE_CLOUD_PROJECT", "geap-trial-run")
         engine_resource_name = (
             os.getenv("GOOGLE_CLOUD_AGENT_ENGINE_ID")
             or os.getenv("GOOGLE_CLOUD_REASONING_ENGINE_RESOURCE_NAME")
@@ -61,26 +57,28 @@ class WarehouseAgentReasoningEngine:
         try:
             import opentelemetry
             import opentelemetry.trace
-            from opentelemetry.sdk.resources import Resource
-            from opentelemetry.sdk.trace import TracerProvider
-            from opentelemetry.sdk.trace.export import SimpleSpanProcessor
-            from opentelemetry.exporter.cloud_trace import CloudTraceSpanExporter
+            from opentelemetry.instrumentation.google_genai import GoogleGenAiSdkInstrumentor
+            from agentplatform.agent_engines.templates.adk import _default_instrumentor_builder
 
-            otel_resource = Resource.create({
-                "cloud.resource_id": short_resource_id,
-                "gcp.vertex.agent.engine_id": short_resource_id,
-                "service.name": "warehouse_adk_agent"
-            })
-            provider = TracerProvider(resource=otel_resource)
-            processor = SimpleSpanProcessor(CloudTraceSpanExporter(project_id=project))
-            provider.add_span_processor(processor)
-            opentelemetry.trace.set_tracer_provider(provider)
-
+            GoogleGenAiSdkInstrumentor().instrument()
+            
+            _default_instrumentor_builder(
+                project_id=project,
+                enable_tracing=True,
+                enable_logging=False
+            )
+            
             self.tracer = opentelemetry.trace.get_tracer("warehouse_adk_agent")
-            print(f"Successfully initialized OpenTelemetry GCP Cloud Trace exporter for resource '{short_resource_id}'.")
+            print(f"Successfully initialized OpenTelemetry for resource '{short_resource_id}'.")
         except Exception as e:
+            import traceback
+            traceback.print_exc()
             print(f"Warning: OpenTelemetry tracer initialization skipped: {e}")
             self.tracer = None
+
+        self.client = genai.Client(vertexai=True, project=project, location="global")
+        if not hasattr(self, "sessions") or self.sessions is None:
+            self.sessions = {}
 
     def _get_engine_resource_path(self):
         """Returns the GCP ReasoningEngine resource base URL path if available."""
@@ -259,6 +257,7 @@ class WarehouseAgentReasoningEngine:
             mcp_endpoint = f"{mcp_endpoint}/mcp"
 
         turn_index = len(sess["turns"]) + 1
+        inv_id = f"turn-{turn_index}"
         turn_record = {
             "turn_index": turn_index,
             "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
@@ -394,14 +393,21 @@ class WarehouseAgentReasoningEngine:
 
                     sess["turns"].append(turn_record)
                     save_session_file(session_id, sess)
-                    inv_id = f"turn-{turn_index}"
                     self._append_managed_session_event(session_id, "user", user_input, inv_id)
                     self._append_managed_session_event(session_id, "model", final_response_text, inv_id)
-                    return {
-                        "session_id": session_id,
-                        "response": final_response_text,
-                        "trajectory": turn_record["steps"]
-                    }
+            try:
+                import opentelemetry.trace
+                tracer_provider = opentelemetry.trace.get_tracer_provider()
+                if hasattr(tracer_provider, "force_flush"):
+                    tracer_provider.force_flush()
+            except Exception:
+                pass
+
+            return {
+                "session_id": session_id,
+                "response": final_response_text,
+                "trajectory": turn_record["steps"]
+            }
 
         try:
             if self.tracer:
@@ -419,10 +425,19 @@ class WarehouseAgentReasoningEngine:
                 return await run_loop()
 
         except Exception as e:
+            import traceback
+            traceback.print_exc()
             err_msg = f"Error executing agent query: {str(e)}"
             turn_record["steps"].append({"step_type": "error", "content": err_msg})
             sess["turns"].append(turn_record)
             save_session_file(session_id, sess)
+            try:
+                import opentelemetry.trace
+                tracer_provider = opentelemetry.trace.get_tracer_provider()
+                if hasattr(tracer_provider, "force_flush"):
+                    tracer_provider.force_flush()
+            except Exception:
+                pass
             return {
                 "session_id": session_id,
                 "response": err_msg,
@@ -503,7 +518,8 @@ def deploy_agent(project_id: str, location: str, mcp_url: str, staging_bucket: s
                 "pyjwt",
                 "opentelemetry-api",
                 "opentelemetry-sdk",
-                "opentelemetry-exporter-gcp-trace",
+                "opentelemetry-exporter-otlp-proto-http",
+                "opentelemetry-exporter-gcp-logging",
                 "opentelemetry-resourcedetector-gcp",
                 "opentelemetry-instrumentation-google-genai"
             ],
@@ -514,7 +530,6 @@ def deploy_agent(project_id: str, location: str, mcp_url: str, staging_bucket: s
                 "GOOGLE_CLOUD_AGENT_ENGINE_ENABLE_TELEMETRY": "true",
                 "OTEL_SEMCONV_STABILITY_OPT_IN": "gen_ai_latest_experimental",
                 "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT": "EVENT_ONLY",
-                "OTEL_TRACES_EXPORTER": "google_cloud",
             }
         )
         print("\n====================================================")
@@ -528,12 +543,15 @@ def deploy_agent(project_id: str, location: str, mcp_url: str, staging_bucket: s
 
 def main():
     project = os.environ.get("GOOGLE_CLOUD_PROJECT")
-    mcp_url = os.environ.get("MCP_SERVER_URL", "https://jush-warehouse-mcp-server-oqdm7jce4a-uc.a.run.app/sse")
+    mcp_url = os.environ.get("MCP_SERVER_URL")
     staging_bucket = os.environ.get("STAGING_BUCKET")
     
     if len(sys.argv) > 1 and sys.argv[1] == "--deploy":
         if not project:
             print("Error: GOOGLE_CLOUD_PROJECT is required for deployment.")
+            sys.exit(1)
+        if not mcp_url:
+            print("Error: MCP_SERVER_URL is required for deployment.")
             sys.exit(1)
         if not staging_bucket:
             staging_bucket = f"gs://{project}-staging"
@@ -544,6 +562,9 @@ def main():
         print("Running local verification of the Reasoning Engine class...")
         if not project:
             os.environ["GOOGLE_CLOUD_PROJECT"] = "geap-workshop-temp-1"
+        if not mcp_url:
+            print("Error: MCP_SERVER_URL is required for local verification.")
+            sys.exit(1)
             
         agent = WarehouseAgentReasoningEngine(mcp_url=mcp_url)
         agent.set_up()
