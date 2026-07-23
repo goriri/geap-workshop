@@ -54,15 +54,13 @@ class WarehouseAgentReasoningEngine:
                 pass
             from opentelemetry import trace
             from opentelemetry.sdk.trace import TracerProvider
-            from opentelemetry.sdk.trace.export import BatchSpanProcessor
+            from opentelemetry.sdk.trace.export import SimpleSpanProcessor
             from opentelemetry.exporter.cloud_trace import CloudTraceSpanExporter
 
-            provider = trace.get_tracer_provider()
-            if not hasattr(provider, "add_span_processor"):
-                provider = TracerProvider()
-                processor = BatchSpanProcessor(CloudTraceSpanExporter(project_id=project))
-                provider.add_span_processor(processor)
-                trace.set_tracer_provider(provider)
+            provider = TracerProvider()
+            processor = SimpleSpanProcessor(CloudTraceSpanExporter(project_id=project))
+            provider.add_span_processor(processor)
+            trace.set_tracer_provider(provider)
 
             self.tracer = trace.get_tracer("warehouse_adk_agent")
             print("Successfully initialized OpenTelemetry GCP Cloud Trace exporter.")
