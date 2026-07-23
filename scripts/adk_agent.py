@@ -48,11 +48,9 @@ class WarehouseAgentReasoningEngine:
             self.sessions = {}
 
         try:
-            try:
-                import opentelemetry.resourcedetector.gcp_resource_detector
-            except Exception:
-                pass
-            from opentelemetry import trace
+            import opentelemetry
+            import opentelemetry.trace
+            import opentelemetry.resourcedetector.gcp_resource_detector
             from opentelemetry.sdk.trace import TracerProvider
             from opentelemetry.sdk.trace.export import SimpleSpanProcessor
             from opentelemetry.exporter.cloud_trace import CloudTraceSpanExporter
@@ -60,9 +58,9 @@ class WarehouseAgentReasoningEngine:
             provider = TracerProvider()
             processor = SimpleSpanProcessor(CloudTraceSpanExporter(project_id=project))
             provider.add_span_processor(processor)
-            trace.set_tracer_provider(provider)
+            opentelemetry.trace.set_tracer_provider(provider)
 
-            self.tracer = trace.get_tracer("warehouse_adk_agent")
+            self.tracer = opentelemetry.trace.get_tracer("warehouse_adk_agent")
             print("Successfully initialized OpenTelemetry GCP Cloud Trace exporter.")
         except Exception as e:
             print(f"Warning: OpenTelemetry tracer initialization skipped: {e}")
@@ -159,7 +157,24 @@ class WarehouseAgentReasoningEngine:
                 with urllib.request.urlopen(req, timeout=5) as resp:
                     pass
             except Exception as e:
-                print(f"Managed Session event append note: {e}")
+                if "404" in str(e):
+                    try:
+                        self._create_managed_session(session_id)
+                        req = urllib.request.Request(
+                            url,
+                            data=json.dumps(payload).encode("utf-8"),
+                            headers={
+                                "Authorization": f"Bearer {token}",
+                                "Content-Type": "application/json"
+                            },
+                            method="POST"
+                        )
+                        with urllib.request.urlopen(req, timeout=5) as resp:
+                            pass
+                    except Exception as retry_e:
+                        print(f"Managed Session event append retry note: {retry_e}")
+                else:
+                    print(f"Managed Session event append note: {e}")
 
         try:
             import threading
