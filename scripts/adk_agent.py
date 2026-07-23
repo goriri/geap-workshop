@@ -47,21 +47,33 @@ class WarehouseAgentReasoningEngine:
         if not hasattr(self, "sessions") or self.sessions is None:
             self.sessions = {}
 
+        engine_resource_name = (
+            os.getenv("GOOGLE_CLOUD_AGENT_ENGINE_ID")
+            or os.getenv("GOOGLE_CLOUD_REASONING_ENGINE_RESOURCE_NAME")
+            or os.getenv("REASONING_ENGINE_RESOURCE_NAME")
+            or getattr(self, "_resource_name", "")
+        )
         try:
             import opentelemetry
             import opentelemetry.trace
             import opentelemetry.resourcedetector.gcp_resource_detector
+            from opentelemetry.sdk.resources import Resource
             from opentelemetry.sdk.trace import TracerProvider
             from opentelemetry.sdk.trace.export import SimpleSpanProcessor
             from opentelemetry.exporter.cloud_trace import CloudTraceSpanExporter
 
-            provider = TracerProvider()
+            otel_resource = Resource.create({
+                "cloud.resource_id": engine_resource_name,
+                "gcp.vertex.agent.engine_id": engine_resource_name,
+                "service.name": "warehouse_adk_agent"
+            })
+            provider = TracerProvider(resource=otel_resource)
             processor = SimpleSpanProcessor(CloudTraceSpanExporter(project_id=project))
             provider.add_span_processor(processor)
             opentelemetry.trace.set_tracer_provider(provider)
 
             self.tracer = opentelemetry.trace.get_tracer("warehouse_adk_agent")
-            print("Successfully initialized OpenTelemetry GCP Cloud Trace exporter.")
+            print(f"Successfully initialized OpenTelemetry GCP Cloud Trace exporter for resource '{engine_resource_name}'.")
         except Exception as e:
             print(f"Warning: OpenTelemetry tracer initialization skipped: {e}")
             self.tracer = None
@@ -389,7 +401,10 @@ class WarehouseAgentReasoningEngine:
 
         try:
             if self.tracer:
+                engine_res_path = self._get_engine_resource_path() or ""
                 with self.tracer.start_as_current_span("agent_query_turn") as span:
+                    span.set_attribute("cloud.resource_id", engine_res_path)
+                    span.set_attribute("gcp.vertex.agent.engine_id", engine_res_path)
                     span.set_attribute("gen_ai.conversation.id", session_id)
                     span.set_attribute("gcp.vertex.agent.session_id", session_id)
                     span.set_attribute("gcp.vertex.agent.invocation_id", inv_id)
@@ -410,15 +425,30 @@ class WarehouseAgentReasoningEngine:
                 "trajectory": turn_record["steps"]
             }
 
-    async def query(self, query: str, session_id: str = None) -> str:
-        """Main query endpoint for Reasoning Engine. Handles query requests or session trajectory retrieval."""
-        if query and query.strip().upper() in ["GET_SESSION", "SHOW_TRAJECTORY", "TRAJECTORY", "GET_TRAJECTORY"]:
-            sess_data = self.get_session(session_id)
+    async def query(self, query: str = None, input: str = None, session_id: str = None, session: str = None, **kwargs) -> str:
+        """Main query endpoint for Reasoning Engine / Cloud Console Playground. Handles query requests or session trajectory retrieval."""
+        prompt_text = query or input or kwargs.get("message") or kwargs.get("prompt")
+        if isinstance(prompt_text, dict):
+            prompt_text = prompt_text.get("query") or prompt_text.get("input") or str(prompt_text)
+        sess_id = session_id or session or kwargs.get("session_name")
+
+        if prompt_text and str(prompt_text).strip().upper() in ["GET_SESSION", "SHOW_TRAJECTORY", "TRAJECTORY", "GET_TRAJECTORY"]:
+            sess_data = self.get_session(sess_id)
             return json.dumps(sess_data, indent=2)
-        res = await self._async_query(query, session_id=session_id)
+        res = await self._async_query(str(prompt_text) if prompt_text else "", session_id=sess_id)
         if isinstance(res, dict):
             return res.get("response", str(res))
         return str(res)
+
+    async def stream_query(self, query: str = None, input: str = None, session_id: str = None, session: str = None, **kwargs):
+        """Streaming query endpoint for Cloud Console Playground compatibility (:streamQuery?alt=sse)."""
+        prompt_text = query or input or kwargs.get("message") or kwargs.get("prompt")
+        if isinstance(prompt_text, dict):
+            prompt_text = prompt_text.get("query") or prompt_text.get("input") or str(prompt_text)
+        sess_id = session_id or session or kwargs.get("session_name")
+
+        res_str = await self.query(query=prompt_text, session_id=sess_id, **kwargs)
+        yield res_str
 
 
 def deploy_agent(project_id: str, location: str, mcp_url: str, staging_bucket: str):
