@@ -503,6 +503,24 @@ def deploy_agent(project_id: str, location: str, mcp_url: str, staging_bucket: s
         sys.exit(1)
     username = re.split(r"[^a-zA-Z0-9]", prefix_env)[0]
     
+    try:
+        import subprocess
+        mcp_service_name = f"{username}-warehouse-mcp-server"
+        print(f"Granting Reasoning Engine service agent permissions to invoke Cloud Run service '{mcp_service_name}'...")
+        proj_num = subprocess.check_output(["gcloud", "projects", "describe", project_id, "--format", "value(projectNumber)"]).decode().strip()
+        service_agent = f"serviceAccount:service-{proj_num}@gcp-sa-aiplatform-re.iam.gserviceaccount.com"
+        subprocess.check_call([
+            "gcloud", "run", "services", "add-iam-policy-binding", mcp_service_name,
+            "--member", service_agent,
+            "--role", "roles/run.invoker",
+            "--region", location,
+            "--project", project_id,
+            "--quiet"
+        ])
+        print("Successfully granted IAM permissions.")
+    except Exception as e:
+        print(f"Warning: Failed to grant IAM permissions automatically: {e}")
+
     print(f"Initializing vertexai & aiplatform (Project: {project_id}, Location: {location}, Staging Bucket: {staging_bucket})...")
     vertexai.init(project=project_id, location=location, staging_bucket=staging_bucket)
     aiplatform.init(project=project_id, location=location, staging_bucket=staging_bucket)
@@ -523,9 +541,12 @@ def deploy_agent(project_id: str, location: str, mcp_url: str, staging_bucket: s
                 "opentelemetry-api",
                 "opentelemetry-sdk",
                 "opentelemetry-exporter-otlp-proto-http",
-                "opentelemetry-exporter-gcp-logging",
-                "opentelemetry-resourcedetector-gcp",
-                "opentelemetry-instrumentation-google-genai"
+                "opentelemetry-instrumentation==0.64b0",
+                "opentelemetry-semantic-conventions==0.64b0",
+                "opentelemetry-util-genai==0.3b0",
+                "opentelemetry-exporter-gcp-logging==1.12.0a0",
+                "opentelemetry-resourcedetector-gcp==1.12.0a0",
+                "opentelemetry-instrumentation-google-genai==0.7b1"
             ],
             display_name=f"{username}-warehouse-assistant-adk",
             gcs_dir_name=f"{username}-reasoning-engine",
