@@ -8,6 +8,14 @@ sqlalchemy==2.0.51
 pg8000==1.31.5
 pyOpenSSL
 cloud-sql-python-connector[pg8000]
-
-
-
+opentelemetry-api
+opentelemetry-sdk
+opentelemetry-exporter-otlp-proto-http
+opentelemetry-instrumentation==0.64b0
+opentelemetry-semantic-conventions==0.64b0
+opentelemetry-util-genai==0.3b0
+opentelemetry-exporter-gcp-logging==1.12.0a0
+opentelemetry-resourcedetector-gcp==1.12.0a0
+opentelemetry-instrumentation-google-genai==0.7b1
+cloudpickle==3.1.2
+pydantic==2.13.4
