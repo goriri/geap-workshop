@@ -5,25 +5,27 @@ import glob
 import argparse
 from google import genai
 
-def observe_local_session(session_id: str = None):
-    sessions_dir = "sessions"
-    if not os.path.exists(sessions_dir):
-        print("No local sessions directory found.")
-        return
+def observe_local_session(session_id: str = None) -> bool:
+    session_dirs = ["sessions", "/tmp/sessions"]
+    session_file = None
 
-    if not session_id:
-        # Find latest session file
-        files = glob.glob(os.path.join(sessions_dir, "*.json"))
-        if not files:
-            print("No session trajectory files found in 'sessions/'.")
-            return
-        files.sort(key=os.path.getmtime, reverse=True)
-        session_file = files[0]
+    if session_id:
+        for sdir in session_dirs:
+            candidate = os.path.join(sdir, f"{session_id}.json")
+            if os.path.exists(candidate):
+                session_file = candidate
+                break
     else:
-        session_file = os.path.join(sessions_dir, f"{session_id}.json")
-        if not os.path.exists(session_file):
-            print(f"Session trajectory file not found: {session_file}")
-            return
+        all_files = []
+        for sdir in session_dirs:
+            if os.path.exists(sdir):
+                all_files.extend(glob.glob(os.path.join(sdir, "*.json")))
+        if all_files:
+            all_files.sort(key=os.path.getmtime, reverse=True)
+            session_file = all_files[0]
+
+    if not session_file or not os.path.exists(session_file):
+        return False
 
     print(f"Loading local session trajectory: {session_file}")
     with open(session_file, "r") as f:
@@ -56,6 +58,7 @@ def observe_local_session(session_id: str = None):
             else:
                 print(f"  [Step {i+1}] {stype}: {step}")
     print("\n" + "="*60)
+    return True
 
 
 def fetch_managed_gcp_session_events(engine_name: str, session_id: str):
@@ -212,8 +215,25 @@ def main():
         observe_interaction(project, args.interaction_id)
     elif args.adk:
         observe_adk_session(project, args.adk, session_id=args.session_id)
+    elif args.local:
+        if not observe_local_session(session_id=args.session_id):
+            print(f"Local session trajectory not found for session_id: {args.session_id or 'latest'}")
     else:
-        observe_local_session(session_id=args.session_id)
+        if not observe_local_session(session_id=args.session_id):
+            if args.session_id and project:
+                try:
+                    from google.cloud import aiplatform
+                    from vertexai.preview import reasoning_engines
+                    aiplatform.init(project=project)
+                    engines = reasoning_engines.ReasoningEngine.list()
+                    if engines:
+                        engine_name = engines[0].resource_name
+                        print(f"Local session file not found. Auto-detected deployed Reasoning Engine: {engine_name}")
+                        observe_adk_session(project, engine_name, session_id=args.session_id)
+                        return
+                except Exception as e:
+                    print(f"Auto-detecting Reasoning Engine note: {e}")
+            print(f"No session trajectory found for session_id: {args.session_id or 'latest'}")
 
 if __name__ == "__main__":
     main()
