@@ -41,6 +41,11 @@ gcloud projects add-iam-policy-binding "$GOOGLE_CLOUD_PROJECT" \
     --role="roles/artifactregistry.writer" \
     --quiet
 
+gcloud projects add-iam-policy-binding "$GOOGLE_CLOUD_PROJECT" \
+    --member="serviceAccount:${SERVICE_ACCOUNT}" \
+    --role="roles/cloudtrace.agent" \
+    --quiet
+
 
 echo "============================================="
 echo "2. Deploying MCP Server to Cloud Run..."
