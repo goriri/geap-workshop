@@ -1,5 +1,6 @@
 import asyncio
 import os
+import re
 import sys
 import time
 import uuid
@@ -497,7 +498,7 @@ def deploy_agent(project_id: str, location: str, mcp_url: str, staging_bucket: s
     from google.cloud import aiplatform
     from vertexai import agent_engines
     import getpass
-    username = getpass.getuser()
+    username = re.split(r"[^a-zA-Z0-9]", os.environ.get("GEAP_PREFIX", getpass.getuser()))[0]
     
     print(f"Initializing vertexai & aiplatform (Project: {project_id}, Location: {location}, Staging Bucket: {staging_bucket})...")
     vertexai.init(project=project_id, location=location, staging_bucket=staging_bucket)

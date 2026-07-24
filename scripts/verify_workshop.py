@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 import json
 import time
@@ -317,7 +318,7 @@ def main():
         print("Error: GOOGLE_CLOUD_PROJECT environment variable is not set.")
         sys.exit(1)
 
-    username = getpass.getuser()
+    username = re.split(r"[^a-zA-Z0-9]", os.environ.get("GEAP_PREFIX", getpass.getuser()))[0]
     mcp_url = os.environ.get("MCP_SERVER_URL")
     agent_id = f"{username}-warehouse-manager"
 

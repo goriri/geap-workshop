@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 import json
 import urllib.request
@@ -14,7 +15,7 @@ def get_auth_token():
 
 def register_mcp_server(project_id: str, location: str, mcp_url: str):
     import getpass
-    username = getpass.getuser()
+    username = re.split(r"[^a-zA-Z0-9]", os.environ.get("GEAP_PREFIX", getpass.getuser()))[0]
     token = get_auth_token()
     service_id = f"{username}-warehouse-db"
     

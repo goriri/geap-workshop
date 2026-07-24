@@ -3,13 +3,16 @@
 # Exit on error
 set -e
 
+RAW_PREFIX="${GEAP_PREFIX:-$USER}"
+PREFIX="${RAW_PREFIX%%[!a-zA-Z0-9]*}"
+
 # Ensure project is set
 if [ -z "$GOOGLE_CLOUD_PROJECT" ]; then
   echo "Error: GOOGLE_CLOUD_PROJECT environment variable is not set."
   exit 1
 fi
 
-DB_INSTANCE="${USER}-warehouse-db"
+DB_INSTANCE="${PREFIX}-warehouse-db"
 export DB_INSTANCE
 DB_NAME="warehouse"
 export DB_NAME

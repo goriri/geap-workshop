@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 import time
 from google import genai
@@ -25,7 +26,7 @@ def main():
     sse_url = mcp_url
 
     import getpass
-    username = getpass.getuser()
+    username = re.split(r"[^a-zA-Z0-9]", os.environ.get("GEAP_PREFIX", getpass.getuser()))[0]
     agent_id = f"{username}-warehouse-manager"
     print(f"Initializing Gemini Client (Project: {project}, Location: global)...")
     client = genai.Client(vertexai=True, project=project, location="global", http_options={"timeout": 1200000})

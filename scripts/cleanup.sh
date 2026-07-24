@@ -1,5 +1,8 @@
 #!/bin/bash
 
+RAW_PREFIX="${GEAP_PREFIX:-$USER}"
+PREFIX="${RAW_PREFIX%%[!a-zA-Z0-9]*}"
+
 # Ensure project is set
 if [ -z "$GOOGLE_CLOUD_PROJECT" ]; then
   echo "Error: GOOGLE_CLOUD_PROJECT environment variable is not set."
@@ -49,15 +52,15 @@ except Exception as e:
 "
 
 # 3. Delete Cloud Run Service
-echo "Deleting Cloud Run service '${USER}-warehouse-mcp-server'..."
-gcloud run services delete "${USER}-warehouse-mcp-server" \
+echo "Deleting Cloud Run service '${PREFIX}-warehouse-mcp-server'..."
+gcloud run services delete "${PREFIX}-warehouse-mcp-server" \
     --region=us-central1 \
     --quiet \
     --project=$GOOGLE_CLOUD_PROJECT
 
 # 4. Delete Cloud SQL Instance
-echo "Deleting Cloud SQL instance '${USER}-warehouse-db' (this can take a few minutes)..."
-gcloud sql instances delete "${USER}-warehouse-db" \
+echo "Deleting Cloud SQL instance '${PREFIX}-warehouse-db' (this can take a few minutes)..."
+gcloud sql instances delete "${PREFIX}-warehouse-db" \
     --quiet \
     --project=$GOOGLE_CLOUD_PROJECT
 

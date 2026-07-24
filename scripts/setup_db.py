@@ -1,11 +1,12 @@
 import os
+import re
 import sys
 import getpass
 import sqlalchemy
 
 def main():
     project = os.environ.get("GOOGLE_CLOUD_PROJECT")
-    username = getpass.getuser()
+    username = re.split(r"[^a-zA-Z0-9]", os.environ.get("GEAP_PREFIX", getpass.getuser()))[0]
     instance_name = os.environ.get("DB_INSTANCE", f"{username}-warehouse-db")
     region = os.environ.get("DB_REGION", "us-central1")
     db_user = os.environ.get("DB_USER", "postgres")

@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 import json
 import urllib.request
@@ -7,7 +8,7 @@ from google import genai
 import google.auth
 import google.auth.transport.requests
 
-username = getpass.getuser()
+username = re.split(r"[^a-zA-Z0-9]", os.environ.get("GEAP_PREFIX", getpass.getuser()))[0]
 client = genai.Client(vertexai=True, project=os.environ["GOOGLE_CLOUD_PROJECT"], location="global", http_options={"timeout": 120.0})
 
 mcp_server_url = os.environ.get("MCP_SERVER_URL")
