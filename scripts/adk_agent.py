@@ -545,7 +545,7 @@ def deploy_agent(project_id: str, location: str, mcp_url: str, staging_bucket: s
                 "opentelemetry-semantic-conventions==0.64b0",
                 "opentelemetry-util-genai==0.3b0",
                 "opentelemetry-exporter-gcp-logging==1.12.0a0",
-                "opentelemetry-exporter-gcp-trace==1.12.0a0",
+                "opentelemetry-exporter-gcp-trace==1.12.0",
                 "opentelemetry-resourcedetector-gcp==1.12.0a0",
                 "opentelemetry-instrumentation-google-genai==0.7b1"
             ],
