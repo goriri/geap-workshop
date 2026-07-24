@@ -497,8 +497,11 @@ def deploy_agent(project_id: str, location: str, mcp_url: str, staging_bucket: s
     import vertexai
     from google.cloud import aiplatform
     from vertexai import agent_engines
-    import getpass
-    username = re.split(r"[^a-zA-Z0-9]", os.environ.get("GEAP_PREFIX", getpass.getuser()))[0]
+    prefix_env = os.environ.get("GEAP_PREFIX")
+    if not prefix_env:
+        print("Error: GEAP_PREFIX environment variable is not set.")
+        sys.exit(1)
+    username = re.split(r"[^a-zA-Z0-9]", prefix_env)[0]
     
     print(f"Initializing vertexai & aiplatform (Project: {project_id}, Location: {location}, Staging Bucket: {staging_bucket})...")
     vertexai.init(project=project_id, location=location, staging_bucket=staging_bucket)

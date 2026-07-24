@@ -3,8 +3,11 @@
 # Exit on error
 set -e
 
-RAW_PREFIX="${GEAP_PREFIX:-$USER}"
-PREFIX="${RAW_PREFIX%%[!a-zA-Z0-9]*}"
+if [ -z "$GEAP_PREFIX" ]; then
+  echo "Error: GEAP_PREFIX environment variable is not set."
+  exit 1
+fi
+PREFIX="${GEAP_PREFIX%%[!a-zA-Z0-9]*}" 
 
 # Ensure project is set
 if [ -z "$GOOGLE_CLOUD_PROJECT" ]; then

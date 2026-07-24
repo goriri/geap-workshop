@@ -33,6 +33,7 @@ gcloud auth application-default login
 Set the project you will use for this workshop:
 ```bash
 export GOOGLE_CLOUD_PROJECT="YOUR_PROJECT_ID"
+export GEAP_PREFIX="your_name" # A unique prefix for your resources (letters and numbers only)
 gcloud config set project $GOOGLE_CLOUD_PROJECT
 ```
 
@@ -273,6 +274,7 @@ You can verify the agent class structure entirely locally (which mocks the remot
 ```bash
 source venv/bin/activate
 export GOOGLE_CLOUD_PROJECT="YOUR_PROJECT_ID"
+export GEAP_PREFIX="your_name"
 export MCP_SERVER_URL="https://YOUR_CLOUD_RUN_SERVICE-uc.a.run.app/sse" # The Server-Sent Events endpoint
 python3 scripts/adk_agent.py
 ```
@@ -282,6 +284,7 @@ To deploy the Python class as a remote Agent Engine instance:
 ```bash
 source venv/bin/activate
 export GOOGLE_CLOUD_PROJECT="YOUR_PROJECT_ID"
+export GEAP_PREFIX="your_name"
 export STAGING_BUCKET="gs://staging.YOUR_PROJECT_ID.appspot.com" # Staging bucket to upload pickle files
 export MCP_SERVER_URL="https://YOUR_CLOUD_RUN_SERVICE-uc.a.run.app/sse" # The Server-Sent Events endpoint
 python3 scripts/adk_agent.py --deploy
@@ -293,6 +296,7 @@ We provide an interactive CLI client script to query and chat with the deployed 
 ```bash
 source venv/bin/activate
 export GOOGLE_CLOUD_PROJECT="YOUR_PROJECT_ID"
+export GEAP_PREFIX="your_name"
 export REASONING_ENGINE_NAME="YOUR_DEPLOYED_REASONING_ENGINE_RESOURCE_NAME"
 python3 scripts/interact_adk_agent.py
 ```
@@ -312,6 +316,7 @@ Verify that the model correctly binds your tools and queries locally:
 ```bash
 source venv/bin/activate
 export GOOGLE_CLOUD_PROJECT="YOUR_PROJECT_ID"
+export GEAP_PREFIX="your_name"
 python3 scripts/langchain_agent.py
 ```
 
@@ -320,6 +325,7 @@ Deploy the compiled LangChain graph to the cloud under Agent Engine:
 ```bash
 source venv/bin/activate
 export GOOGLE_CLOUD_PROJECT="YOUR_PROJECT_ID"
+export GEAP_PREFIX="your_name"
 export STAGING_BUCKET="gs://staging.YOUR_PROJECT_ID.appspot.com"
 python3 scripts/langchain_agent.py --deploy
 ```

@@ -10,7 +10,6 @@ from google import genai
 import google.genai.types as genai_types
 from mcp import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
-import getpass
 
 def print_banner(text):
     print("\n" + "=" * 60)
@@ -318,7 +317,11 @@ def main():
         print("Error: GOOGLE_CLOUD_PROJECT environment variable is not set.")
         sys.exit(1)
 
-    username = re.split(r"[^a-zA-Z0-9]", os.environ.get("GEAP_PREFIX", getpass.getuser()))[0]
+    prefix_env = os.environ.get("GEAP_PREFIX")
+    if not prefix_env:
+        print("Error: GEAP_PREFIX environment variable is not set.")
+        sys.exit(1)
+    username = re.split(r"[^a-zA-Z0-9]", prefix_env)[0]
     mcp_url = os.environ.get("MCP_SERVER_URL")
     agent_id = f"{username}-warehouse-manager"
 

@@ -14,8 +14,11 @@ def get_auth_token():
     return credentials.token
 
 def register_mcp_server(project_id: str, location: str, mcp_url: str):
-    import getpass
-    username = re.split(r"[^a-zA-Z0-9]", os.environ.get("GEAP_PREFIX", getpass.getuser()))[0]
+    prefix_env = os.environ.get("GEAP_PREFIX")
+    if not prefix_env:
+        print("Error: GEAP_PREFIX environment variable is not set.")
+        sys.exit(1)
+    username = re.split(r"[^a-zA-Z0-9]", prefix_env)[0]
     token = get_auth_token()
     service_id = f"{username}-warehouse-db"
     

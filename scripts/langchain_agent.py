@@ -9,7 +9,6 @@ import argparse
 import os
 import re
 import sys
-import getpass
 import vertexai
 from vertexai.preview import reasoning_engines
 
@@ -78,7 +77,11 @@ def main():
     else:
         # 3. Deploy remotely
         print("\nDeploying LangChain agent to Vertex AI...")
-        username = re.split(r"[^a-zA-Z0-9]", os.environ.get("GEAP_PREFIX", getpass.getuser()))[0]
+        prefix_env = os.environ.get("GEAP_PREFIX")
+        if not prefix_env:
+            print("Error: GEAP_PREFIX environment variable is not set.")
+            sys.exit(1)
+        username = re.split(r"[^a-zA-Z0-9]", prefix_env)[0]
         remote_agent = reasoning_engines.ReasoningEngine.create(
             agent,
             requirements=[

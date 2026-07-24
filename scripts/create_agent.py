@@ -3,12 +3,15 @@ import re
 import sys
 import json
 import urllib.request
-import getpass
 from google import genai
 import google.auth
 import google.auth.transport.requests
 
-username = re.split(r"[^a-zA-Z0-9]", os.environ.get("GEAP_PREFIX", getpass.getuser()))[0]
+prefix_env = os.environ.get("GEAP_PREFIX")
+if not prefix_env:
+    print("Error: GEAP_PREFIX environment variable is not set.")
+    sys.exit(1)
+username = re.split(r"[^a-zA-Z0-9]", prefix_env)[0]
 client = genai.Client(vertexai=True, project=os.environ["GOOGLE_CLOUD_PROJECT"], location="global", http_options={"timeout": 120.0})
 
 mcp_server_url = os.environ.get("MCP_SERVER_URL")
