@@ -64,6 +64,6 @@ echo "============================================="
 echo "Deployment complete!"
 echo "Your MCP Server URL: ${SERVICE_URL}"
 echo "Set this as environment variable for registration:"
-echo "export MCP_SERVER_URL=\"${SERVICE_URL}/sse\""
+echo "export MCP_SERVER_URL=\"${SERVICE_URL}/mcp\""
 echo "============================================="
 

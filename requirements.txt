@@ -20,3 +20,5 @@ opentelemetry-resourcedetector-gcp==1.12.0a0
 opentelemetry-instrumentation-google-genai==0.7b1
 cloudpickle==3.1.2
 pydantic==2.13.4
+google-adk
+
