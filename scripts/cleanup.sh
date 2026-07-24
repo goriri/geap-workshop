@@ -4,7 +4,7 @@ if [ -z "$GEAP_PREFIX" ]; then
   echo "Error: GEAP_PREFIX environment variable is not set."
   exit 1
 fi
-PREFIX="${GEAP_PREFIX%%[!a-zA-Z0-9]*}" 
+PREFIX="$GEAP_PREFIX" 
 
 # Ensure project is set
 if [ -z "$GOOGLE_CLOUD_PROJECT" ]; then
@@ -21,11 +21,10 @@ echo "Deleting managed agent..."
 python3 -c "
 from google import genai
 import os
-import getpass
 try:
-    username = getpass.getuser()
+    prefix = os.environ.get('GEAP_PREFIX')
     client = genai.Client(vertexai=True, project=os.environ['GOOGLE_CLOUD_PROJECT'], location='global')
-    client.agents.delete(id=f'{username}-warehouse-manager')
+    client.agents.delete(id=f'{prefix}-warehouse-manager')
     print('Successfully deleted agent.')
 except Exception as e:
     print('Agent deletion skipped or failed:', e)
@@ -35,7 +34,6 @@ except Exception as e:
 echo "Deleting user's deployed Reasoning Engines in us-central1..."
 venv/bin/python3 -c "
 import os
-import getpass
 import google.auth
 from google.cloud import aiplatform
 from vertexai.preview import reasoning_engines
@@ -43,11 +41,11 @@ try:
     project = os.environ.get('GOOGLE_CLOUD_PROJECT')
     if not project:
         raise ValueError('GOOGLE_CLOUD_PROJECT env var is not set.')
-    username = getpass.getuser()
+    prefix = os.environ.get('GEAP_PREFIX')
     aiplatform.init(project=project, location='us-central1')
     engines = reasoning_engines.ReasoningEngine.list()
     for e in engines:
-        if e.display_name.startswith(f'{username}-'):
+        if e.display_name.startswith(f'{prefix}-'):
             print(f'Deleting Reasoning Engine: {e.resource_name} ({e.display_name})')
             e.delete()
 except Exception as e:

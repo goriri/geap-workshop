@@ -77,11 +77,10 @@ def main():
     else:
         # 3. Deploy remotely
         print("\nDeploying LangChain agent to Vertex AI...")
-        prefix_env = os.environ.get("GEAP_PREFIX")
-        if not prefix_env:
+        prefix = os.environ.get("GEAP_PREFIX")
+        if not prefix:
             print("Error: GEAP_PREFIX environment variable is not set.")
             sys.exit(1)
-        username = re.split(r"[^a-zA-Z0-9]", prefix_env)[0]
         remote_agent = reasoning_engines.ReasoningEngine.create(
             agent,
             requirements=[
@@ -90,8 +89,8 @@ def main():
                 "cloudpickle",
                 "pydantic",
             ],
-            display_name=f"{username}-sample-langchain-agent",
-            gcs_dir_name=f"{username}-langchain-agent",
+            display_name=f"{prefix}-sample-langchain-agent",
+            gcs_dir_name=f"{prefix}-langchain-agent",
             description="A sample LangChain-based agent deployed via Vertex AI Reasoning Engine.",
         )
         print("\n====================================================")

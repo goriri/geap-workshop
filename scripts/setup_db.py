@@ -5,12 +5,11 @@ import sqlalchemy
 
 def main():
     project = os.environ.get("GOOGLE_CLOUD_PROJECT")
-    prefix_env = os.environ.get("GEAP_PREFIX")
-    if not prefix_env:
+    prefix = os.environ.get("GEAP_PREFIX")
+    if not prefix:
         print("Error: GEAP_PREFIX environment variable is not set.")
         sys.exit(1)
-    username = re.split(r"[^a-zA-Z0-9]", prefix_env)[0]
-    instance_name = os.environ.get("DB_INSTANCE", f"{username}-warehouse-db")
+    instance_name = os.environ.get("DB_INSTANCE", f"{prefix}-warehouse-db")
     region = os.environ.get("DB_REGION", "us-central1")
     db_user = os.environ.get("DB_USER", "postgres")
     db_pass = os.environ.get("DB_PASS", "super-secret-password")

@@ -317,13 +317,12 @@ def main():
         print("Error: GOOGLE_CLOUD_PROJECT environment variable is not set.")
         sys.exit(1)
 
-    prefix_env = os.environ.get("GEAP_PREFIX")
-    if not prefix_env:
+    prefix = os.environ.get("GEAP_PREFIX")
+    if not prefix:
         print("Error: GEAP_PREFIX environment variable is not set.")
         sys.exit(1)
-    username = re.split(r"[^a-zA-Z0-9]", prefix_env)[0]
     mcp_url = os.environ.get("MCP_SERVER_URL")
-    agent_id = f"{username}-warehouse-manager"
+    agent_id = f"{prefix}-warehouse-manager"
 
     parser = argparse.ArgumentParser(description="Verify the GEAP Warehouse Management Agent.")
     parser.add_argument("--remote", action="store_true", help="Run verification using the remote cloud managed agent.")

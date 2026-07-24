@@ -497,15 +497,14 @@ def deploy_agent(project_id: str, location: str, mcp_url: str, staging_bucket: s
     import vertexai
     from google.cloud import aiplatform
     from vertexai import agent_engines
-    prefix_env = os.environ.get("GEAP_PREFIX")
-    if not prefix_env:
+    prefix = os.environ.get("GEAP_PREFIX")
+    if not prefix:
         print("Error: GEAP_PREFIX environment variable is not set.")
         sys.exit(1)
-    username = re.split(r"[^a-zA-Z0-9]", prefix_env)[0]
     
     try:
         import subprocess
-        mcp_service_name = f"{username}-warehouse-mcp-server"
+        mcp_service_name = f"{prefix}-warehouse-mcp-server"
         print(f"Granting Reasoning Engine service agent permissions to invoke Cloud Run service '{mcp_service_name}'...")
         proj_num = subprocess.check_output(["gcloud", "projects", "describe", project_id, "--format", "value(projectNumber)"]).decode().strip()
         service_agent = f"serviceAccount:service-{proj_num}@gcp-sa-aiplatform-re.iam.gserviceaccount.com"
@@ -549,8 +548,8 @@ def deploy_agent(project_id: str, location: str, mcp_url: str, staging_bucket: s
                 "opentelemetry-resourcedetector-gcp==1.12.0a0",
                 "opentelemetry-instrumentation-google-genai==0.7b1"
             ],
-            display_name=f"{username}-warehouse-assistant-adk",
-            gcs_dir_name=f"{username}-reasoning-engine",
+            display_name=f"{prefix}-warehouse-assistant-adk",
+            gcs_dir_name=f"{prefix}-reasoning-engine",
             extra_packages=[],
             env_vars={
                 "GOOGLE_CLOUD_AGENT_ENGINE_ENABLE_TELEMETRY": "true",

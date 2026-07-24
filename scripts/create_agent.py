@@ -7,11 +7,10 @@ from google import genai
 import google.auth
 import google.auth.transport.requests
 
-prefix_env = os.environ.get("GEAP_PREFIX")
-if not prefix_env:
+prefix = os.environ.get("GEAP_PREFIX")
+if not prefix:
     print("Error: GEAP_PREFIX environment variable is not set.")
     sys.exit(1)
-username = re.split(r"[^a-zA-Z0-9]", prefix_env)[0]
 client = genai.Client(vertexai=True, project=os.environ["GOOGLE_CLOUD_PROJECT"], location="global", http_options={"timeout": 120.0})
 
 mcp_server_url = os.environ.get("MCP_SERVER_URL")
@@ -28,7 +27,7 @@ if not mcp_server_url.endswith("/mcp"):
 print(f"Creating remote agent with MCP server at {mcp_server_url}...")
 
 operation = client.agents.create(
-    id=f"{username}-warehouse-manager",
+    id=f"{prefix}-warehouse-manager",
     base_agent="antigravity-preview-05-2026",
     description="An AI assistant that can manage a warehouse inventory and create customer orders.",
     system_instruction=(
@@ -39,7 +38,7 @@ operation = client.agents.create(
     ),
     tools=[{
         "type": "mcp_server",
-        "name": f"{username}-warehouse-db",
+        "name": f"{prefix}-warehouse-db",
         "url": mcp_server_url
     }],
     base_environment={

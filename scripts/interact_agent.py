@@ -25,12 +25,11 @@ def main():
     audience = mcp_url
     sse_url = mcp_url
 
-    prefix_env = os.environ.get("GEAP_PREFIX")
-    if not prefix_env:
+    prefix = os.environ.get("GEAP_PREFIX")
+    if not prefix:
         print("Error: GEAP_PREFIX environment variable is not set.")
         sys.exit(1)
-    username = re.split(r"[^a-zA-Z0-9]", prefix_env)[0]
-    agent_id = f"{username}-warehouse-manager"
+    agent_id = f"{prefix}-warehouse-manager"
     print(f"Initializing Gemini Client (Project: {project}, Location: global)...")
     client = genai.Client(vertexai=True, project=project, location="global", http_options={"timeout": 1200000})
 
