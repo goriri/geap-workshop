@@ -14,13 +14,13 @@ def get_auth_token():
     return credentials.token
 
 def register_mcp_server(project_id: str, location: str, mcp_url: str):
-    prefix_env = os.environ.get("GEAP_PREFIX")
-    if not prefix_env:
+    prefix = os.environ.get("GEAP_PREFIX")
+    if not prefix:
         print("Error: GEAP_PREFIX environment variable is not set.")
         sys.exit(1)
-    username = re.split(r"[^a-zA-Z0-9]", prefix_env)[0]
+    
     token = get_auth_token()
-    service_id = f"{username}-warehouse-db"
+    service_id = f"{prefix}-warehouse-db"
     
     # 1. First try to delete the service if it already exists to start clean
     delete_url = f"https://agentregistry.googleapis.com/v1alpha/projects/{project_id}/locations/{location}/services/{service_id}"
