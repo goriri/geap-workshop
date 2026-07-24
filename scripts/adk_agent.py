@@ -428,7 +428,11 @@ class WarehouseAgentReasoningEngine:
         except Exception as e:
             import traceback
             traceback.print_exc()
-            err_msg = f"Error executing agent query: {str(e)}"
+            sub_errs = []
+            if hasattr(e, "exceptions"):
+                sub_errs = [f"{type(se).__name__}: {str(se)}" for se in getattr(e, "exceptions", [])]
+            err_details = f" ({'; '.join(sub_errs)})" if sub_errs else ""
+            err_msg = f"Error executing agent query: {str(e)}{err_details}"
             turn_record["steps"].append({"step_type": "error", "content": err_msg})
             sess["turns"].append(turn_record)
             save_session_file(session_id, sess)
